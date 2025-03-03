@@ -14,7 +14,6 @@ from .modules.outline_generation import StormOutlineGenerationModule
 from .modules.persona_generator import StormPersonaGenerator
 from .modules.storm_dataclass import StormInformationTable, StormArticle
 from ..interface import Engine, LMConfigs, Retriever
-from ..lm import LitellmModel
 from ..utils import FileIOHelper, makeStringRed, truncate_filename
 
 
@@ -61,43 +60,43 @@ class STORMWikiLMConfigs(LMConfigs):
             "api_base": None,
         }
         if openai_type and openai_type == "openai":
-            self.conv_simulator_lm = LitellmModel(
+            self.conv_simulator_lm = dspy.LM(
                 model="gpt-4o-mini-2024-07-18", max_tokens=500, **openai_kwargs
             )
-            self.question_asker_lm = LitellmModel(
+            self.question_asker_lm = dspy.LM(
                 model="gpt-4o-mini-2024-07-18", max_tokens=500, **openai_kwargs
             )
             # 1/12/2024: Update gpt-4 to gpt-4-1106-preview. (Currently keep the original setup when using azure.)
-            self.outline_gen_lm = LitellmModel(
+            self.outline_gen_lm = dspy.LM(
                 model="gpt-4-0125-preview", max_tokens=400, **openai_kwargs
             )
-            self.article_gen_lm = LitellmModel(
+            self.article_gen_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=700, **openai_kwargs
             )
-            self.article_polish_lm = LitellmModel(
+            self.article_polish_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=4000, **openai_kwargs
             )
         elif openai_type and openai_type == "azure":
-            self.conv_simulator_lm = LitellmModel(
+            self.conv_simulator_lm = dspy.LM(
                 model="azure/gpt-4o-mini-2024-07-18", max_tokens=500, **openai_kwargs
             )
-            self.question_asker_lm = LitellmModel(
+            self.question_asker_lm = dspy.LM(
                 model="azure/gpt-4o-mini-2024-07-18",
                 max_tokens=500,
                 **azure_kwargs,
                 model_type="chat",
             )
             # use combination of openai and azure-openai as azure-openai does not support gpt-4 in standard deployment
-            self.outline_gen_lm = LitellmModel(
+            self.outline_gen_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=400, **azure_kwargs, model_type="chat"
             )
-            self.article_gen_lm = LitellmModel(
+            self.article_gen_lm = dspy.LM(
                 model="azure/gpt-4o-mini-2024-07-18",
                 max_tokens=700,
                 **azure_kwargs,
                 model_type="chat",
             )
-            self.article_polish_lm = LitellmModel(
+            self.article_polish_lm = dspy.LM(
                 model="azure/gpt-4o-mini-2024-07-18",
                 max_tokens=4000,
                 **azure_kwargs,
