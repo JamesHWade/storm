@@ -15,8 +15,6 @@ from tqdm import tqdm
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from trafilatura import extract
 
-from .lm import LitellmModel
-
 logging.getLogger("httpx").setLevel(logging.WARNING)  # Disable INFO logging for httpx.
 
 
@@ -711,83 +709,84 @@ class WebPageHelper:
         return articles
 
 
-def user_input_appropriateness_check(user_input):
-    my_openai_model = LitellmModel(
-        model="azure/gpt-4o-mini",
-        max_tokens=10,
-        temperature=0.0,
-        top_p=0.9,
-    )
+# TODO: Use user's LM model to check the appropriateness of the input for both user_input_appropriateness_check and purpose_appropriateness_check.
+# def user_input_appropriateness_check(user_input):
+#     my_openai_model = LitellmModel(
+#         model="azure/gpt-4o-mini",
+#         max_tokens=10,
+#         temperature=0.0,
+#         top_p=0.9,
+#     )
 
-    if len(user_input.split()) > 20:
-        return "The input is too long. Please make your input topic more concise!"
+#     if len(user_input.split()) > 20:
+#         return "The input is too long. Please make your input topic more concise!"
 
-    if not re.match(r'^[a-zA-Z0-9\s\-"\,\.?\']*$', user_input):
-        return "The input contains invalid characters. The input should only contain a-z, A-Z, 0-9, space, -/\"/,./?/'."
+#     if not re.match(r'^[a-zA-Z0-9\s\-"\,\.?\']*$', user_input):
+#         return "The input contains invalid characters. The input should only contain a-z, A-Z, 0-9, space, -/\"/,./?/'."
 
-    prompt = f"""Here is a topic input into a knowledge curation engine that can write a Wikipedia-like article for the topic. Please judge whether it is appropriate or not for the engine to curate information for this topic based on English search engine. The following types of inputs are inappropriate:
-1. Inputs that may be related to illegal, harmful, violent, racist, or sexual purposes.
-2. Inputs that are given using languages other than English. Currently, the engine can only support English.
-3. Inputs that are related to personal experience or personal information. Currently, the engine can only use information from the search engine.
-4. Inputs that are not aimed at topic research or inquiry. For example, asks requiring detailed execution, such as calculations, programming, or specific service searches fall outside the engine's scope of capabilities.
-If the topic is appropriate for the engine to process, output "Yes."; otherwise, output "No. The input violates reason [1/2/3/4]".
-User input: {user_input}"""
-    reject_reason_info = {
-        1: "Sorry, this input may be related to sensitive topics. Please try another topic. "
-        "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
-        "We apologize for any inconvenience.)",
-        2: "Sorry, the current engine can only support English. Please try another topic. "
-        "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
-        "We apologize for any inconvenience.)",
-        3: "Sorry, the current engine cannot process topics related to personal experience. Please try another topic. "
-        "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
-        "We apologize for any inconvenience.)",
-        4: "Sorry, STORM cannot follow arbitrary instruction. Please input a topic you want to learn about. "
-        "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
-        "We apologize for any inconvenience.)",
-    }
+#     prompt = f"""Here is a topic input into a knowledge curation engine that can write a Wikipedia-like article for the topic. Please judge whether it is appropriate or not for the engine to curate information for this topic based on English search engine. The following types of inputs are inappropriate:
+# 1. Inputs that may be related to illegal, harmful, violent, racist, or sexual purposes.
+# 2. Inputs that are given using languages other than English. Currently, the engine can only support English.
+# 3. Inputs that are related to personal experience or personal information. Currently, the engine can only use information from the search engine.
+# 4. Inputs that are not aimed at topic research or inquiry. For example, asks requiring detailed execution, such as calculations, programming, or specific service searches fall outside the engine's scope of capabilities.
+# If the topic is appropriate for the engine to process, output "Yes."; otherwise, output "No. The input violates reason [1/2/3/4]".
+# User input: {user_input}"""
+#     reject_reason_info = {
+#         1: "Sorry, this input may be related to sensitive topics. Please try another topic. "
+#         "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
+#         "We apologize for any inconvenience.)",
+#         2: "Sorry, the current engine can only support English. Please try another topic. "
+#         "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
+#         "We apologize for any inconvenience.)",
+#         3: "Sorry, the current engine cannot process topics related to personal experience. Please try another topic. "
+#         "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
+#         "We apologize for any inconvenience.)",
+#         4: "Sorry, STORM cannot follow arbitrary instruction. Please input a topic you want to learn about. "
+#         "(Our input filtering uses OpenAI GPT-4o-mini, which may result in false positives. "
+#         "We apologize for any inconvenience.)",
+#     }
 
-    try:
-        response = my_openai_model(prompt)[0].replace("[", "").replace("]", "")
-        if response.startswith("No"):
-            match = regex.search(r"reason\s(\d+)", response)
-            if match:
-                reject_reason = int(match.group(1))
-                if reject_reason in reject_reason_info:
-                    return reject_reason_info[reject_reason]
-                else:
-                    return (
-                        "Sorry, the input is inappropriate. Please try another topic!"
-                    )
-            return "Sorry, the input is inappropriate. Please try another topic!"
+#     try:
+#         response = my_openai_model(prompt)[0].replace("[", "").replace("]", "")
+#         if response.startswith("No"):
+#             match = regex.search(r"reason\s(\d+)", response)
+#             if match:
+#                 reject_reason = int(match.group(1))
+#                 if reject_reason in reject_reason_info:
+#                     return reject_reason_info[reject_reason]
+#                 else:
+#                     return (
+#                         "Sorry, the input is inappropriate. Please try another topic!"
+#                     )
+#             return "Sorry, the input is inappropriate. Please try another topic!"
 
-    except Exception as e:
-        return "Sorry, the input is inappropriate. Please try another topic!"
-    return "Approved"
+#     except Exception as e:
+#         return "Sorry, the input is inappropriate. Please try another topic!"
+#     return "Approved"
 
 
-def purpose_appropriateness_check(user_input):
-    my_openai_model = LitellmModel(
-        model="azure/gpt-4o-mini",
-        max_tokens=10,
-        temperature=0.0,
-        top_p=0.9,
-    )
+# def purpose_appropriateness_check(user_input):
+#     my_openai_model = LitellmModel(
+#         model="azure/gpt-4o-mini",
+#         max_tokens=10,
+#         temperature=0.0,
+#         top_p=0.9,
+#     )
 
-    prompt = f"""
-    Here is a purpose input into a report generation engine that can create a long-form report on any topic of interest. 
-    Please judge whether the provided purpose is valid for using this service. 
-    Try to judge if given purpose is non-sense like random words or just try to get around the sanity check.
-    You should not make the rule too strict.
-    
-    If the purpose is valid, output "Yes."; otherwise, output "No" followed by reason.
-    User input: {user_input}
-    """
-    try:
-        response = my_openai_model(prompt)[0].replace("[", "").replace("]", "")
-        if response.startswith("No"):
-            return "Please provide a more detailed explanation on your purpose of requesting this article."
+#     prompt = f"""
+#     Here is a purpose input into a report generation engine that can create a long-form report on any topic of interest.
+#     Please judge whether the provided purpose is valid for using this service.
+#     Try to judge if given purpose is non-sense like random words or just try to get around the sanity check.
+#     You should not make the rule too strict.
 
-    except Exception as e:
-        return "Please provide a more detailed explanation on your purpose of requesting this article."
-    return "Approved"
+#     If the purpose is valid, output "Yes."; otherwise, output "No" followed by reason.
+#     User input: {user_input}
+#     """
+#     try:
+#         response = my_openai_model(prompt)[0].replace("[", "").replace("]", "")
+#         if response.startswith("No"):
+#             return "Please provide a more detailed explanation on your purpose of requesting this article."
+
+#     except Exception as e:
+#         return "Please provide a more detailed explanation on your purpose of requesting this article."
+#     return "Approved"
