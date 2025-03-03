@@ -5,7 +5,6 @@ from typing import Callable, Union, List
 import backoff
 import dspy
 import requests
-from dsp import backoff_hdlr, giveup_hdlr
 
 from .utils import WebPageHelper
 
@@ -790,8 +789,6 @@ class DuckDuckGoSearchRM(dspy.Retrieve):
         (Exception,),
         max_time=1000,
         max_tries=8,
-        on_backoff=backoff_hdlr,
-        giveup=giveup_hdlr,
     )
     def request(self, query: str):
         results = self.ddgs.text(
