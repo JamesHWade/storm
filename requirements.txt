@@ -1,4 +1,4 @@
-dspy_ai==2.4.9
+dspy
 wikipedia==1.4.0
 sentence-transformers
 toml
@@ -7,6 +7,6 @@ trafilatura
 langchain-huggingface
 qdrant-client
 langchain-qdrant
-numpy==1.26.4
-litellm==1.59.3
+numpy
+litellm
 diskcache
