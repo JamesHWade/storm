@@ -17,7 +17,6 @@ from ..dataclass import ConversationTurn, KnowledgeBase
 from ..encoder import Encoder
 from ..interface import LMConfigs, Agent
 from ..logging_wrapper import LoggingWrapper
-from ..lm import LitellmModel
 from ..rm import BingSearch
 
 
@@ -50,22 +49,22 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 "top_p": top_p,
                 "api_base": None,
             }
-            self.question_answering_lm = LitellmModel(
+            self.question_answering_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=1000, **openai_kwargs
             )
-            self.discourse_manage_lm = LitellmModel(
+            self.discourse_manage_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=500, **openai_kwargs
             )
-            self.utterance_polishing_lm = LitellmModel(
+            self.utterance_polishing_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=2000, **openai_kwargs
             )
-            self.warmstart_outline_gen_lm = LitellmModel(
+            self.warmstart_outline_gen_lm = dspy.LM(
                 model="gpt-4-1106-preview", max_tokens=500, **openai_kwargs
             )
-            self.question_asking_lm = LitellmModel(
+            self.question_asking_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=300, **openai_kwargs
             )
-            self.knowledge_base_lm = LitellmModel(
+            self.knowledge_base_lm = dspy.LM(
                 model="gpt-4o-2024-05-13", max_tokens=1000, **openai_kwargs
             )
         elif lm_type and lm_type == "azure":
@@ -76,22 +75,22 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 "api_base": os.getenv("AZURE_API_BASE"),
                 "api_version": os.getenv("AZURE_API_VERSION"),
             }
-            self.question_answering_lm = LitellmModel(
+            self.question_answering_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=1000, **azure_kwargs, model_type="chat"
             )
-            self.discourse_manage_lm = LitellmModel(
+            self.discourse_manage_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=500, **azure_kwargs, model_type="chat"
             )
-            self.utterance_polishing_lm = LitellmModel(
+            self.utterance_polishing_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=2000, **azure_kwargs, model_type="chat"
             )
-            self.warmstart_outline_gen_lm = LitellmModel(
+            self.warmstart_outline_gen_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=300, **azure_kwargs, model_type="chat"
             )
-            self.question_asking_lm = LitellmModel(
+            self.question_asking_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=300, **azure_kwargs, model_type="chat"
             )
-            self.knowledge_base_lm = LitellmModel(
+            self.knowledge_base_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=1000, **azure_kwargs, model_type="chat"
             )
         elif lm_type and lm_type == "together":
@@ -100,37 +99,37 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 "temperature": temperature,
                 "top_p": top_p,
             }
-            self.question_answering_lm = LitellmModel(
+            self.question_answering_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=1000,
                 model_type="chat",
                 **together_kwargs,
             )
-            self.discourse_manage_lm = LitellmModel(
+            self.discourse_manage_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=500,
                 model_type="chat",
                 **together_kwargs,
             )
-            self.utterance_polishing_lm = LitellmModel(
+            self.utterance_polishing_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=2000,
                 model_type="chat",
                 **together_kwargs,
             )
-            self.warmstart_outline_gen_lm = LitellmModel(
+            self.warmstart_outline_gen_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=500,
                 model_type="chat",
                 **together_kwargs,
             )
-            self.question_asking_lm = LitellmModel(
+            self.question_asking_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=300,
                 model_type="chat",
                 **together_kwargs,
             )
-            self.knowledge_base_lm = LitellmModel(
+            self.knowledge_base_lm = dspy.LM(
                 model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
                 max_tokens=1000,
                 model_type="chat",
