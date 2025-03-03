@@ -51,7 +51,7 @@ class InsertInformationCandidateChoice(dspy.Signature):
 
 
 class InsertInformationModule(dspy.Module):
-    def __init__(self, engine: Union[dspy.dsp.LM, dspy.dsp.HFModel], encoder: Encoder):
+    def __init__(self, engine: dspy.LM, encoder: Encoder):
         self.engine = engine
         self.encoder = encoder
         self.insert_info = dspy.ChainOfThought(InsertInformation)
@@ -334,7 +334,7 @@ class ExpandSection(dspy.Signature):
 class ExpandNodeModule(dspy.Module):
     def __init__(
         self,
-        engine: Union[dspy.dsp.LM, dspy.dsp.HFModel],
+        engine: dspy.LM,
         information_insert_module: dspy.Module,
         node_expansion_trigger_count: int,
     ):
