@@ -223,13 +223,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
         config = cls()
 
         # Import LM class
-        try:
-            from knowledge_storm.lm import LM
-        except ImportError:
-            # Fallback if import path is different
-            from ..lm import LM
-
-        # Process each LM configuration from the data - don't use get() with lm_config again
+        from dspy import LM
         for attr_name, model_info in data.items():
             if attr_name.endswith("_lm") and model_info:
                 # Extract model class if specified
