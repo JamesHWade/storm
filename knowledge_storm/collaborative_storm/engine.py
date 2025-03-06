@@ -224,6 +224,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
 
         # Import LM class
         from dspy import LM
+
         for attr_name, model_info in data.items():
             if attr_name.endswith("_lm") and model_info:
                 # Extract model class if specified
@@ -931,6 +932,7 @@ _token_expiry = None
 # Azure AD tokens typically last for ~1 hour
 _TOKEN_REFRESH_MARGIN = 300  # Refresh 5 minutes before expiry
 
+
 def get_auth_headers():
     """
     Helper function to get authentication headers based on available credentials.
@@ -941,7 +943,7 @@ def get_auth_headers():
         dict: A dictionary containing authentication headers if available
     """
     global _cached_token, _token_expiry
-    
+
     auth_headers = {}
 
     # Try to get Azure API key if available
@@ -964,11 +966,15 @@ def get_auth_headers():
 
             if importlib.util.find_spec("azure.identity"):
                 from azure.identity import ClientSecretCredential
-                
+
                 current_time = datetime.now()
-                
+
                 # Check if we have a valid token that's not close to expiration
-                if _cached_token is None or _token_expiry is None or current_time >= _token_expiry:
+                if (
+                    _cached_token is None
+                    or _token_expiry is None
+                    or current_time >= _token_expiry
+                ):
                     # Token is expired or about to expire, get a new one
                     token = (
                         ClientSecretCredential(
@@ -980,16 +986,18 @@ def get_auth_headers():
                         .token
                     )
                     _cached_token = token
-                    
+
                     # Calculate when this token will expire (typically 1 hour/3600 seconds)
                     # Setting expiry 5 minutes before actual expiry for safety margin
-                    _token_expiry = current_time + timedelta(seconds=3600 - _TOKEN_REFRESH_MARGIN)
-                    
+                    _token_expiry = current_time + timedelta(
+                        seconds=1800 - _TOKEN_REFRESH_MARGIN
+                    )
+
                     print(f"New Azure auth token obtained, valid until {_token_expiry}")
                 else:
                     # Use cached token
                     token = _cached_token
-                
+
                 auth_headers["Authorization"] = f"Bearer {token}"
         except ImportError:
             # If azure.identity isn't available, continue without token
