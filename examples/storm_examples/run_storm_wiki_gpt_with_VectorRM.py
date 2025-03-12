@@ -30,13 +30,13 @@ import os
 from argparse import ArgumentParser
 
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
+from knowledge_storm.lm import AzureOpenAIModel, OpenAIModel
 from knowledge_storm.rm import VectorRM
-from knowledge_storm.lm import OpenAIModel, AzureOpenAIModel
-from knowledge_storm.utils import load_api_key, QdrantVectorStoreManager
+from knowledge_storm.utils import QdrantVectorStoreManager, load_api_key
 
 
 def main(args):
@@ -51,9 +51,7 @@ def main(args):
         "top_p": 0.9,
     }
 
-    ModelClass = (
-        OpenAIModel if os.getenv("OPENAI_API_TYPE") == "openai" else AzureOpenAIModel
-    )
+    ModelClass = OpenAIModel if os.getenv("OPENAI_API_TYPE") == "openai" else AzureOpenAIModel
     # If you are using Azure service, make sure the model name matches your own deployed model name.
     # The default name here is only used for demonstration and may not match your case.
     gpt_35_model_name = (
@@ -69,17 +67,11 @@ def main(args):
     # which is used to split queries, synthesize answers in the conversation. We recommend using stronger models
     # for outline_gen_lm which is responsible for organizing the collected information, and article_gen_lm
     # which is responsible for generating sections with citations.
-    conv_simulator_lm = ModelClass(
-        model=gpt_35_model_name, max_tokens=500, **openai_kwargs
-    )
-    question_asker_lm = ModelClass(
-        model=gpt_35_model_name, max_tokens=500, **openai_kwargs
-    )
+    conv_simulator_lm = ModelClass(model=gpt_35_model_name, max_tokens=500, **openai_kwargs)
+    question_asker_lm = ModelClass(model=gpt_35_model_name, max_tokens=500, **openai_kwargs)
     outline_gen_lm = ModelClass(model=gpt_4_model_name, max_tokens=400, **openai_kwargs)
     article_gen_lm = ModelClass(model=gpt_4_model_name, max_tokens=700, **openai_kwargs)
-    article_polish_lm = ModelClass(
-        model=gpt_4_model_name, max_tokens=4000, **openai_kwargs
-    )
+    article_polish_lm = ModelClass(model=gpt_4_model_name, max_tokens=4000, **openai_kwargs)
 
     engine_lm_configs.set_conv_simulator_lm(conv_simulator_lm)
     engine_lm_configs.set_question_asker_lm(question_asker_lm)
@@ -116,9 +108,7 @@ def main(args):
             )
         elif args.vector_db_mode == "online":
             QdrantVectorStoreManager.create_or_update_vector_store(
-                url=args.online_vector_db_url,
-                api_key=os.getenv("QDRANT_API_KEY"),
-                **kwargs
+                url=args.online_vector_db_url, api_key=os.getenv("QDRANT_API_KEY"), **kwargs
             )
 
     # Setup VectorRM to retrieve information from your own data
@@ -133,9 +123,7 @@ def main(args):
     if args.vector_db_mode == "offline":
         rm.init_offline_vector_db(vector_store_path=args.offline_vector_db_dir)
     elif args.vector_db_mode == "online":
-        rm.init_online_vector_db(
-            url=args.online_vector_db_url, api_key=os.getenv("QDRANT_API_KEY")
-        )
+        rm.init_online_vector_db(url=args.online_vector_db_url, api_key=os.getenv("QDRANT_API_KEY"))
 
     # Initialize the STORM Wiki Runner
     runner = STORMWikiRunner(engine_args, engine_lm_configs, rm)

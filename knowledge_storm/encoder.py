@@ -1,9 +1,9 @@
 import os
-import numpy as np
-
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import List, Tuple, Union, Optional, Dict, Literal
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
 
 try:
     import warnings
@@ -26,9 +26,7 @@ except ImportError:
 
     class LitellmPlaceholder:
         def __getattr__(self, _):
-            raise ImportError(
-                "The LiteLLM package is not installed. Run `pip install litellm`."
-            )
+            raise ImportError("The LiteLLM package is not installed. Run `pip install litellm`.")
 
     litellm = LitellmPlaceholder()
 
@@ -160,8 +158,7 @@ class Encoder:
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
-                executor.submit(self._get_single_text_embedding, text): text
-                for text in texts
+                executor.submit(self._get_single_text_embedding, text): text for text in texts
             }
 
             for future in as_completed(futures):

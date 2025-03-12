@@ -8,21 +8,20 @@ from typing import Optional
 import markdown
 import pytz
 import streamlit as st
+from stoc import stoc
 
 # If you install the source code instead of the `knowledge-storm` package,
 # Uncomment the following lines:
 # import sys
 # sys.path.append('../../')
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
 from knowledge_storm.lm import OpenAIModel
 from knowledge_storm.rm import YouRM
 from knowledge_storm.storm_wiki.modules.callback import BaseCallbackHandler
-from knowledge_storm.utils import truncate_filename
-from stoc import stoc
 
 
 class DemoFileIOHelper:
@@ -144,20 +143,11 @@ class DemoFileIOHelper:
 
         for file_path in file_paths:
             modification_timestamp = os.path.getmtime(file_path)
-            modification_time_utc = datetime.datetime.utcfromtimestamp(
-                modification_timestamp
-            )
-            modification_time_utc = modification_time_utc.replace(
-                tzinfo=datetime.timezone.utc
-            )
-            modification_time_california = modification_time_utc.astimezone(
-                california_tz
-            )
+            modification_time_utc = datetime.datetime.utcfromtimestamp(modification_timestamp)
+            modification_time_utc = modification_time_utc.replace(tzinfo=datetime.timezone.utc)
+            modification_time_california = modification_time_utc.astimezone(california_tz)
 
-            if (
-                latest_mod_time is None
-                or modification_time_california > latest_mod_time
-            ):
+            if latest_mod_time is None or modification_time_california > latest_mod_time:
                 latest_mod_time = modification_time_california
 
         if latest_mod_time is not None:
@@ -197,16 +187,12 @@ class DemoFileIOHelper:
             )
             article_data = {
                 "article": DemoTextProcessingHelper.parse(
-                    DemoFileIOHelper.read_txt_file(
-                        article_file_path_dict[full_article_name]
-                    )
+                    DemoFileIOHelper.read_txt_file(article_file_path_dict[full_article_name])
                 )
             }
             if "url_to_info.json" in article_file_path_dict:
                 article_data["citations"] = _construct_citation_dict_from_search_result(
-                    DemoFileIOHelper.read_json_file(
-                        article_file_path_dict["url_to_info.json"]
-                    )
+                    DemoFileIOHelper.read_json_file(article_file_path_dict["url_to_info.json"])
                 )
             if "conversation_log.json" in article_file_path_dict:
                 article_data["conversation_log"] = DemoFileIOHelper.read_json_file(
@@ -219,11 +205,7 @@ class DemoFileIOHelper:
 class DemoTextProcessingHelper:
     @staticmethod
     def remove_citations(sent):
-        return (
-            re.sub(r"\[\d+", "", re.sub(r" \[\d+", "", sent))
-            .replace(" |", "")
-            .replace("]", "")
-        )
+        return re.sub(r"\[\d+", "", re.sub(r" \[\d+", "", sent)).replace(" |", "").replace("]", "")
 
     @staticmethod
     def parse_conversation_history(json_data):
@@ -234,13 +216,9 @@ class DemoTextProcessingHelper:
         parsed_data = []
         for persona_conversation_data in json_data:
             if ": " in persona_conversation_data["perspective"]:
-                name, description = persona_conversation_data["perspective"].split(
-                    ": ", 1
-                )
+                name, description = persona_conversation_data["perspective"].split(": ", 1)
             elif "- " in persona_conversation_data["perspective"]:
-                name, description = persona_conversation_data["perspective"].split(
-                    "- ", 1
-                )
+                name, description = persona_conversation_data["perspective"].split("- ", 1)
             else:
                 name, description = "", persona_conversation_data["perspective"]
             cur_conversation = []
@@ -296,9 +274,7 @@ class DemoTextProcessingHelper:
         return california_now.strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
-    def compare_time_strings(
-        time_string1, time_string2, time_format="%Y-%m-%d %H:%M:%S"
-    ):
+    def compare_time_strings(time_string1, time_string2, time_format="%Y-%m-%d %H:%M:%S"):
         """
         Compares two time strings to determine if they represent the same point in time.
 
@@ -348,9 +324,7 @@ class DemoTextProcessingHelper:
     def construct_bibliography_from_url_to_info(url_to_info):
         bibliography_list = []
         sorted_url_to_unified_index = dict(
-            sorted(
-                url_to_info["url_to_unified_index"].items(), key=lambda item: item[1]
-            )
+            sorted(url_to_info["url_to_unified_index"].items(), key=lambda item: item[1])
         )
         for url, index in sorted_url_to_unified_index.items():
             title = url_to_info["url_to_info"][url]["title"]
@@ -445,7 +419,7 @@ class DemoUIHelper:
             </head>
             <body>
                 <div class="title">
-                    <h1>{article_title.replace('_', ' ')}</h1>
+                    <h1>{article_title.replace("_", " ")}</h1>
                 </div>
                 <h2>Table of Contents</h2>
                 {DemoTextProcessingHelper.generate_html_toc(article_content)}
@@ -472,14 +446,11 @@ def _display_main_article_text(article_text, citation_dict, table_content_sideba
     # Post-process the generated article for better display.
     if "Write the lead section:" in article_text:
         article_text = article_text[
-            article_text.find("Write the lead section:")
-            + len("Write the lead section:") :
+            article_text.find("Write the lead section:") + len("Write the lead section:") :
         ]
     if article_text[0] == "#":
         article_text = "\n".join(article_text.split("\n")[1:])
-    article_text = DemoTextProcessingHelper.add_inline_citation_link(
-        article_text, citation_dict
-    )
+    article_text = DemoTextProcessingHelper.add_inline_citation_link(article_text, citation_dict)
     # '$' needs to be changed to '\$' to avoid being interpreted as LaTeX in st.markdown()
     article_text = article_text.replace("$", "\\$")
     stoc.from_markdown(article_text, table_content_sidebar)
@@ -526,14 +497,10 @@ def _display_persona_conversations(conversation_log):
 def _display_main_article(
     selected_article_file_path_dict, show_reference=True, show_conversation=True
 ):
-    article_data = DemoFileIOHelper.assemble_article_data(
-        selected_article_file_path_dict
-    )
+    article_data = DemoFileIOHelper.assemble_article_data(selected_article_file_path_dict)
 
     with st.container(height=1000, border=True):
-        table_content_sidebar = st.sidebar.expander(
-            "**Table of contents**", expanded=True
-        )
+        table_content_sidebar = st.sidebar.expander("**Table of contents**", expanded=True)
         _display_main_article_text(
             article_text=article_data.get("article", ""),
             citation_dict=article_data.get("citations", {}),
@@ -581,9 +548,7 @@ def set_storm_runner():
 
     # configure STORM runner
     llm_configs = STORMWikiLMConfigs()
-    llm_configs.init_openai_model(
-        openai_api_key=st.secrets["OPENAI_API_KEY"], openai_type="openai"
-    )
+    llm_configs.init_openai_model(openai_api_key=st.secrets["OPENAI_API_KEY"], openai_type="openai")
     llm_configs.set_question_asker_lm(
         OpenAIModel(
             model="gpt-4-1106-preview",
@@ -664,14 +629,12 @@ class StreamlitCallbackHandler(BaseCallbackHandler):
         self.status_container.success("Finish collecting information.")
 
     def on_information_organization_start(self, **kwargs):
-        self.status_container.info(
-            "Start organizing information into a hierarchical outline."
-        )
+        self.status_container.info("Start organizing information into a hierarchical outline.")
 
     def on_direct_outline_generation_end(self, outline: str, **kwargs):
         self.status_container.success(
-            f"Finish leveraging the internal knowledge of the large language model."
+            "Finish leveraging the internal knowledge of the large language model."
         )
 
     def on_outline_refinement_end(self, outline: str, **kwargs):
-        self.status_container.success(f"Finish leveraging the collected information.")
+        self.status_container.success("Finish leveraging the collected information.")

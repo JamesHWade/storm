@@ -56,9 +56,7 @@ class stoc:
         def increase_heading_depth_and_add_top_heading(markdown_text, new_top_heading):
             lines = markdown_text.splitlines()
             # Increase the depth of each heading by adding an extra '#'
-            increased_depth_lines = [
-                "#" + line if line.startswith("#") else line for line in lines
-            ]
+            increased_depth_lines = ["#" + line if line.startswith("#") else line for line in lines]
             # Add the new top-level heading at the beginning
             increased_depth_lines.insert(0, f"# {new_top_heading}")
             # Re-join the modified lines back into a single string
@@ -66,20 +64,14 @@ class stoc:
             return modified_text
 
         if topic:
-            markdown_text = increase_heading_depth_and_add_top_heading(
-                markdown_text, topic
-            )
+            markdown_text = increase_heading_depth_and_add_top_heading(markdown_text, topic)
         toc = []
         for line in markdown_text.splitlines():
             if line.startswith("#"):
                 # Remove the '#' characters and strip leading/trailing spaces
                 heading_text = line.lstrip("#").strip()
                 # Create slug (lowercase, spaces to hyphens, remove non-alphanumeric characters)
-                slug = (
-                    re.sub(r"[^a-zA-Z0-9\s-]", "", heading_text)
-                    .lower()
-                    .replace(" ", "-")
-                )
+                slug = re.sub(r"[^a-zA-Z0-9\s-]", "", heading_text).lower().replace(" ", "-")
                 # Determine heading level for indentation
                 level = line.count("#") - 1
                 # Add to the table of contents
@@ -132,8 +124,6 @@ def normalize(s):
     s = s.lower()
 
     # Keep only alphanum and remove "-" suffix if existing
-    normalized = (
-        "".join([char if char.isalnum() else "-" for char in s]).strip("-").lower()
-    )
+    normalized = "".join([char if char.isalnum() else "-" for char in s]).strip("-").lower()
 
     return normalized

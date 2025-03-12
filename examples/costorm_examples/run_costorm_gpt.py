@@ -13,27 +13,28 @@ args.output_dir/
     report.txt         # Final article generated
 """
 
-import os
 import json
+import os
 from argparse import ArgumentParser
+
 from knowledge_storm.collaborative_storm.engine import (
     CollaborativeStormLMConfigs,
-    RunnerArgument,
     CoStormRunner,
+    RunnerArgument,
 )
 from knowledge_storm.collaborative_storm.modules.callback import (
     LocalConsolePrintCallBackHandler,
 )
-from knowledge_storm.lm import OpenAIModel, AzureOpenAIModel
+from knowledge_storm.lm import AzureOpenAIModel, OpenAIModel
 from knowledge_storm.logging_wrapper import LoggingWrapper
 from knowledge_storm.rm import (
-    YouRM,
     BingSearch,
     BraveRM,
-    SerperRM,
     DuckDuckGoSearchRM,
-    TavilySearchRM,
     SearXNG,
+    SerperRM,
+    TavilySearchRM,
+    YouRM,
 )
 from knowledge_storm.utils import load_api_key
 
@@ -59,9 +60,7 @@ def main(args):
         }
     )
 
-    ModelClass = (
-        OpenAIModel if os.getenv("OPENAI_API_TYPE") == "openai" else AzureOpenAIModel
-    )
+    ModelClass = OpenAIModel if os.getenv("OPENAI_API_TYPE") == "openai" else AzureOpenAIModel
     # If you are using Azure service, make sure the model name matches your own deployed model name.
     # The default name here is only used for demonstration and may not match your case.
     gpt_4o_mini_model_name = "gpt-4o-mini"
@@ -75,24 +74,12 @@ def main(args):
     # which is used to split queries, synthesize answers in the conversation. We recommend using stronger models
     # for outline_gen_lm which is responsible for organizing the collected information, and article_gen_lm
     # which is responsible for generating sections with citations.
-    question_answering_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=1000, **openai_kwargs
-    )
-    discourse_manage_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=500, **openai_kwargs
-    )
-    utterance_polishing_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=2000, **openai_kwargs
-    )
-    warmstart_outline_gen_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=500, **openai_kwargs
-    )
-    question_asking_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=300, **openai_kwargs
-    )
-    knowledge_base_lm = ModelClass(
-        model=gpt_4o_model_name, max_tokens=1000, **openai_kwargs
-    )
+    question_answering_lm = ModelClass(model=gpt_4o_model_name, max_tokens=1000, **openai_kwargs)
+    discourse_manage_lm = ModelClass(model=gpt_4o_model_name, max_tokens=500, **openai_kwargs)
+    utterance_polishing_lm = ModelClass(model=gpt_4o_model_name, max_tokens=2000, **openai_kwargs)
+    warmstart_outline_gen_lm = ModelClass(model=gpt_4o_model_name, max_tokens=500, **openai_kwargs)
+    question_asking_lm = ModelClass(model=gpt_4o_model_name, max_tokens=300, **openai_kwargs)
+    knowledge_base_lm = ModelClass(model=gpt_4o_model_name, max_tokens=1000, **openai_kwargs)
 
     lm_config.set_question_answering_lm(question_answering_lm)
     lm_config.set_discourse_manage_lm(discourse_manage_lm)
@@ -118,9 +105,7 @@ def main(args):
         node_expansion_trigger_count=args.node_expansion_trigger_count,
     )
     logging_wrapper = LoggingWrapper(lm_config)
-    callback_handler = (
-        LocalConsolePrintCallBackHandler() if args.enable_log_print else None
-    )
+    callback_handler = LocalConsolePrintCallBackHandler() if args.enable_log_print else None
 
     # Co-STORM is a knowledge curation system which consumes information from the retrieval module.
     # Currently, the information source is the Internet and we use search engine API as the retrieval module.
@@ -131,9 +116,7 @@ def main(args):
                 k=runner_argument.retrieve_top_k,
             )
         case "you":
-            rm = YouRM(
-                ydc_api_key=os.getenv("YDC_API_KEY"), k=runner_argument.retrieve_top_k
-            )
+            rm = YouRM(ydc_api_key=os.getenv("YDC_API_KEY"), k=runner_argument.retrieve_top_k)
         case "brave":
             rm = BraveRM(
                 brave_search_api_key=os.getenv("BRAVE_API_KEY"),

@@ -1,23 +1,24 @@
-import dspy
 import os
-from dataclasses import dataclass, field, asdict
-from typing import List, Union, Literal, Optional, Dict
+from dataclasses import asdict, dataclass, field
+from typing import Dict, List, Literal, Optional, Union
 
+import dspy
+
+from ..dataclass import ConversationTurn, KnowledgeBase
+from ..encoder import Encoder
+from ..interface import Agent, LMConfigs
+from ..logging_wrapper import LoggingWrapper
+from ..rm import BingSearch
 from .modules import collaborative_storm_utils as collaborative_storm_utils
 from .modules.callback import BaseCallbackHandler
 from .modules.co_storm_agents import (
-    SimulatedUser,
-    PureRAGAgent,
-    Moderator,
     CoStormExpert,
+    Moderator,
+    PureRAGAgent,
+    SimulatedUser,
 )
 from .modules.expert_generation import GenerateExpertModule
 from .modules.warmstart_hierarchical_chat import WarmStartModule
-from ..dataclass import ConversationTurn, KnowledgeBase
-from ..encoder import Encoder
-from ..interface import LMConfigs, Agent
-from ..logging_wrapper import LoggingWrapper
-from ..rm import BingSearch
 
 
 class CollaborativeStormLMConfigs(LMConfigs):
@@ -161,9 +162,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
     def collect_and_reset_lm_usage(self):
         lm_usage = {}
         for attr_name in self.__dict__:
-            if "_lm" in attr_name and hasattr(
-                getattr(self, attr_name), "get_usage_and_reset"
-            ):
+            if "_lm" in attr_name and hasattr(getattr(self, attr_name), "get_usage_and_reset"):
                 usage = getattr(self, attr_name).get_usage_and_reset()
                 if any(
                     value["prompt_tokens"] != 0 or value["completion_tokens"] != 0
@@ -215,9 +214,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
         """
         # If there's no data, raise an exception
         if not data:
-            raise ValueError(
-                "No data provided to construct CollaborativeStormLMConfigs"
-            )
+            raise ValueError("No data provided to construct CollaborativeStormLMConfigs")
 
         # Create a new instance
         config = cls()
@@ -270,9 +267,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
                     )
                     setattr(config, attr_name, lm)
                 except Exception as e:
-                    print(
-                        f"Warning: Could not create {attr_name} with model {model}: {e}"
-                    )
+                    print(f"Warning: Could not create {attr_name} with model {model}: {e}")
                     # Don't attempt to create a fallback here
 
         return config
@@ -291,9 +286,7 @@ class RunnerArgument:
     )
     max_search_queries: int = field(
         default=2,
-        metadata={
-            "help": "Maximum number of search queries to consider for each question."
-        },
+        metadata={"help": "Maximum number of search queries to consider for each question."},
     )
     total_conv_turn: int = field(
         default=20,
@@ -309,9 +302,7 @@ class RunnerArgument:
     )
     warmstart_max_num_experts: int = field(
         default=3,
-        metadata={
-            "help": "Max number of experts in perspective guided QA in warm start process"
-        },
+        metadata={"help": "Max number of experts in perspective guided QA in warm start process"},
     )
     warmstart_max_turn_per_experts: int = field(
         default=2,
@@ -342,9 +333,7 @@ class RunnerArgument:
     )
     node_expansion_trigger_count: int = field(
         default=10,
-        metadata={
-            "help": "Trigger node expansion for node that contain more than N snippets"
-        },
+        metadata={"help": "Trigger node expansion for node that contain more than N snippets"},
     )
     disable_moderator: bool = field(
         default=False,
@@ -497,9 +486,7 @@ class DiscourseManager:
                 )
             )
 
-    def _should_generate_question(
-        self, conversation_history: List[ConversationTurn]
-    ) -> bool:
+    def _should_generate_question(self, conversation_history: List[ConversationTurn]) -> bool:
         consecutive_non_questioning_turn = 0
         for conv_turn in reversed(conversation_history):
             if conv_turn.utterance_type not in [
@@ -568,9 +555,8 @@ class DiscourseManager:
             next_turn_policy.agent = self.moderator
             if not dry_run:
                 self.next_turn_moderator_override = False
-        elif (
-            not self.runner_argument.disable_moderator
-            and self._should_generate_question(conversation_history)
+        elif not self.runner_argument.disable_moderator and self._should_generate_question(
+            conversation_history
         ):
             next_turn_policy.agent = self.moderator
             next_turn_policy.should_reorganize_knowledge_base = True
@@ -638,12 +624,8 @@ class CoStormRunner:
         result = {
             "runner_argument": self.runner_argument.to_dict(),
             "lm_config": self.lm_config.to_dict(),
-            "conversation_history": [
-                turn.to_dict() for turn in self.conversation_history
-            ],
-            "warmstart_conv_archive": [
-                turn.to_dict() for turn in self.warmstart_conv_archive
-            ],
+            "conversation_history": [turn.to_dict() for turn in self.conversation_history],
+            "warmstart_conv_archive": [turn.to_dict() for turn in self.warmstart_conv_archive],
             "experts": self.discourse_manager.serialize_experts(),
             "knowledge_base": self.knowledge_base.to_dict(),
         }
@@ -689,8 +671,7 @@ class CoStormRunner:
             if auth_headers:
                 encoder = Encoder(
                     api_key=None,
-                    api_base=os.getenv("AZURE_OPENAI_ENDPOINT")
-                    or os.getenv("AZURE_API_BASE"),
+                    api_base=os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE"),
                     extra_headers=auth_headers,
                 )
 
@@ -716,14 +697,12 @@ class CoStormRunner:
         # Load data from the dictionary
         if "conversation_history" in data:
             costorm_runner.conversation_history = [
-                ConversationTurn.from_dict(turn)
-                for turn in data["conversation_history"]
+                ConversationTurn.from_dict(turn) for turn in data["conversation_history"]
             ]
 
         if "warmstart_conv_archive" in data:
             costorm_runner.warmstart_conv_archive = [
-                ConversationTurn.from_dict(turn)
-                for turn in data["warmstart_conv_archive"]
+                ConversationTurn.from_dict(turn) for turn in data["warmstart_conv_archive"]
             ]
 
         if "experts" in data:
@@ -752,9 +731,7 @@ class CoStormRunner:
         It will also generate a first draft of report and use it to produce an engaging and concise conversation presented to the
         user to catch up with system's knowledge about the topic.
         """
-        with self.logging_wrapper.log_pipeline_stage(
-            pipeline_stage=f"warm start stage"
-        ):
+        with self.logging_wrapper.log_pipeline_stage(pipeline_stage="warm start stage"):
             if not self.runner_argument.rag_only_baseline_mode:
                 warm_start_module = WarmStartModule(
                     lm_config=self.lm_config,
@@ -773,9 +750,7 @@ class CoStormRunner:
                     knowledge_base=self.knowledge_base,
                 )
                 self.discourse_manager.experts = (
-                    self.discourse_manager._parse_expert_names_to_agent(
-                        warmstart_experts
-                    )
+                    self.discourse_manager._parse_expert_names_to_agent(warmstart_experts)
                 )
                 self.discourse_manager.next_turn_moderator_override = True
                 self.conversation_history = (
@@ -793,9 +768,7 @@ class CoStormRunner:
                     )
                 if self.conversation_history is None:
                     self.conversation_history = []
-                conv_turn = (
-                    self.discourse_manager.pure_rag_agent.generate_topic_background()
-                )
+                conv_turn = self.discourse_manager.pure_rag_agent.generate_topic_background()
                 self.conversation_history.append(conv_turn)
                 self.knowledge_base.update_from_conv_turn(
                     conv_turn=conv_turn,
@@ -814,9 +787,7 @@ class CoStormRunner:
         with self.logging_wrapper.log_pipeline_stage(
             f"report generation after conv turn: {len(self.conversation_history)}"
         ):
-            with self.logging_wrapper.log_event(
-                "report generation stage: generate report"
-            ):
+            with self.logging_wrapper.log_event("report generation stage: generate report"):
                 self.report = self.knowledge_base.to_report()
                 return self.report
 
@@ -860,9 +831,7 @@ class CoStormRunner:
         """
         last_conv_turn = self.conversation_history[-1]
         cur_turn_name = f"conv turn: {len(self.conversation_history) + 1}"
-        with self.logging_wrapper.log_pipeline_stage(
-            pipeline_stage=f"{cur_turn_name} stage"
-        ):
+        with self.logging_wrapper.log_pipeline_stage(pipeline_stage=f"{cur_turn_name} stage"):
             conv_turn = None
             if user_utterance:
                 self.discourse_manager.next_turn_moderator_override = False
@@ -873,9 +842,7 @@ class CoStormRunner:
                 )
                 self.conversation_history.append(conv_turn)
             else:
-                with self.logging_wrapper.log_event(
-                    f"{cur_turn_name}: get turn policy"
-                ):
+                with self.logging_wrapper.log_event(f"{cur_turn_name}: get turn policy"):
                     if self.callback_handler is not None:
                         self.callback_handler.on_turn_policy_planning_start()
                     turn_policy = self.discourse_manager.get_next_turn_policy(
@@ -885,18 +852,14 @@ class CoStormRunner:
                         dry_run=False,
                     )
 
-                with self.logging_wrapper.log_event(
-                    f"{cur_turn_name}: generate utterance"
-                ):
+                with self.logging_wrapper.log_event(f"{cur_turn_name}: generate utterance"):
                     conv_turn = turn_policy.agent.generate_utterance(
                         knowledge_base=self.knowledge_base,
                         conversation_history=self.conversation_history,
                     )
 
                 if turn_policy.should_update_experts_list:
-                    with self.logging_wrapper.log_event(
-                        f"{cur_turn_name}: update experts list"
-                    ):
+                    with self.logging_wrapper.log_event(f"{cur_turn_name}: update experts list"):
                         self.discourse_manager._update_expert_list_from_utterance(
                             focus=last_conv_turn.raw_utterance,
                             background_info=conv_turn.raw_utterance,
@@ -953,9 +916,7 @@ def get_auth_headers():
 
     # Try to get Azure Bearer token only if needed
     client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
-        "AZURE_CLIENT_SECRET"
-    )
+    client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv("AZURE_CLIENT_SECRET")
     tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
 
     if all([client_id, client_secret, tenant_id]):
@@ -970,11 +931,7 @@ def get_auth_headers():
                 current_time = datetime.now()
 
                 # Check if we have a valid token that's not close to expiration
-                if (
-                    _cached_token is None
-                    or _token_expiry is None
-                    or current_time >= _token_expiry
-                ):
+                if _cached_token is None or _token_expiry is None or current_time >= _token_expiry:
                     # Token is expired or about to expire, get a new one
                     token = (
                         ClientSecretCredential(
@@ -989,9 +946,7 @@ def get_auth_headers():
 
                     # Calculate when this token will expire (typically 1 hour/3600 seconds)
                     # Setting expiry 5 minutes before actual expiry for safety margin
-                    _token_expiry = current_time + timedelta(
-                        seconds=1800 - _TOKEN_REFRESH_MARGIN
-                    )
+                    _token_expiry = current_time + timedelta(seconds=1800 - _TOKEN_REFRESH_MARGIN)
 
                     print(f"New Azure auth token obtained, valid until {_token_expiry}")
                 else:

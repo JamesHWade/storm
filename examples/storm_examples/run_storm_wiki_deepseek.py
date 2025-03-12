@@ -17,25 +17,25 @@ args.output_dir/
         storm_gen_article_polished.txt  # Polished final article (if args.do_polish_article is True)
 """
 
+import logging
 import os
 import re
-import logging
 from argparse import ArgumentParser
 
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
 from knowledge_storm.lm import DeepSeekModel
 from knowledge_storm.rm import (
-    YouRM,
     BingSearch,
     BraveRM,
-    SerperRM,
     DuckDuckGoSearchRM,
-    TavilySearchRM,
     SearXNG,
+    SerperRM,
+    TavilySearchRM,
+    YouRM,
 )
 from knowledge_storm.utils import load_api_key
 
@@ -79,17 +79,11 @@ def main(args):
 
     # DeepSeek offers two main models: 'deepseek-chat' for general tasks and 'deepseek-coder' for coding tasks
     # Users can choose the appropriate model based on their needs
-    conv_simulator_lm = DeepSeekModel(
-        model=args.model, max_tokens=500, **deepseek_kwargs
-    )
-    question_asker_lm = DeepSeekModel(
-        model=args.model, max_tokens=500, **deepseek_kwargs
-    )
+    conv_simulator_lm = DeepSeekModel(model=args.model, max_tokens=500, **deepseek_kwargs)
+    question_asker_lm = DeepSeekModel(model=args.model, max_tokens=500, **deepseek_kwargs)
     outline_gen_lm = DeepSeekModel(model=args.model, max_tokens=400, **deepseek_kwargs)
     article_gen_lm = DeepSeekModel(model=args.model, max_tokens=700, **deepseek_kwargs)
-    article_polish_lm = DeepSeekModel(
-        model=args.model, max_tokens=4000, **deepseek_kwargs
-    )
+    article_polish_lm = DeepSeekModel(model=args.model, max_tokens=4000, **deepseek_kwargs)
 
     lm_configs.set_conv_simulator_lm(conv_simulator_lm)
     lm_configs.set_question_asker_lm(question_asker_lm)
@@ -121,9 +115,7 @@ def main(args):
                 k=engine_args.search_top_k,
             )
         case "duckduckgo":
-            rm = DuckDuckGoSearchRM(
-                k=engine_args.search_top_k, safe_search="On", region="us-en"
-            )
+            rm = DuckDuckGoSearchRM(k=engine_args.search_top_k, safe_search="On", region="us-en")
         case "serper":
             rm = SerperRM(
                 serper_search_api_key=os.getenv("SERPER_API_KEY"),
@@ -136,9 +128,7 @@ def main(args):
                 include_raw_content=True,
             )
         case "searxng":
-            rm = SearXNG(
-                searxng_api_key=os.getenv("SEARXNG_API_KEY"), k=engine_args.search_top_k
-            )
+            rm = SearXNG(searxng_api_key=os.getenv("SEARXNG_API_KEY"), k=engine_args.search_top_k)
         case _:
             raise ValueError(
                 f'Invalid retriever: {args.retriever}. Choose either "bing", "you", "brave", "duckduckgo", "serper", "tavily", or "searxng"'
@@ -198,9 +188,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--temperature", type=float, default=1.0, help="Sampling temperature to use."
     )
-    parser.add_argument(
-        "--top_p", type=float, default=0.9, help="Top-p sampling parameter."
-    )
+    parser.add_argument("--top_p", type=float, default=0.9, help="Top-p sampling parameter.")
     # stage of the pipeline
     parser.add_argument(
         "--do-research",

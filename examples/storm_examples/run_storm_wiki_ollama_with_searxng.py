@@ -4,9 +4,9 @@ from argparse import ArgumentParser
 from dspy import Example
 
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
 from knowledge_storm.lm import OllamaClient
 from knowledge_storm.rm import SearXNG
@@ -107,9 +107,7 @@ def main(args):
         "This is an example sentence [1]. This is another example sentence [2][3].\n"
         "## Subsection 2\nThis is one more example sentence [1].",
     )
-    runner.storm_article_generation.section_gen.write_section.demos = [
-        write_section_example
-    ]
+    runner.storm_article_generation.section_gen.write_section.demos = [write_section_example]
 
     topic = input("Topic: ")
     runner.run(
@@ -129,9 +127,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--url", type=str, default="http://localhost", help="URL of the Ollama server."
     )
-    parser.add_argument(
-        "--port", type=int, default=11434, help="Port of the Ollama server."
-    )
+    parser.add_argument("--port", type=int, default=11434, help="Port of the Ollama server.")
     parser.add_argument(
         "--model", type=str, default="llama3:latest", help="Model of the Ollama server."
     )

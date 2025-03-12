@@ -20,9 +20,9 @@ import os
 from argparse import ArgumentParser
 
 from knowledge_storm import (
-    STORMWikiRunnerArguments,
-    STORMWikiRunner,
     STORMWikiLMConfigs,
+    STORMWikiRunner,
+    STORMWikiRunnerArguments,
 )
 from knowledge_storm.lm import ClaudeModel
 from knowledge_storm.rm import SerperRM
@@ -49,12 +49,8 @@ def main(args):
     question_asker_lm = ClaudeModel(
         model="claude-3-sonnet-20240229", max_tokens=500, **claude_kwargs
     )
-    outline_gen_lm = ClaudeModel(
-        model="claude-3-opus-20240229", max_tokens=400, **claude_kwargs
-    )
-    article_gen_lm = ClaudeModel(
-        model="claude-3-opus-20240229", max_tokens=700, **claude_kwargs
-    )
+    outline_gen_lm = ClaudeModel(model="claude-3-opus-20240229", max_tokens=400, **claude_kwargs)
+    article_gen_lm = ClaudeModel(model="claude-3-opus-20240229", max_tokens=700, **claude_kwargs)
     article_polish_lm = ClaudeModel(
         model="claude-3-opus-20240229", max_tokens=4000, **claude_kwargs
     )

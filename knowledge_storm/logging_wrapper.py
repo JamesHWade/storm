@@ -1,7 +1,8 @@
-from contextlib import contextmanager
 import time
-import pytz
+from contextlib import contextmanager
 from datetime import datetime
+
+import pytz
 
 # Define California timezone
 CALIFORNIA_TZ = pytz.timezone("America/Los_Angeles")
@@ -15,14 +16,10 @@ class EventLog:
         self.child_events = {}
 
     def record_start_time(self):
-        self.start_time = datetime.now(
-            pytz.utc
-        )  # Store in UTC for consistent timezone conversion
+        self.start_time = datetime.now(pytz.utc)  # Store in UTC for consistent timezone conversion
 
     def record_end_time(self):
-        self.end_time = datetime.now(
-            pytz.utc
-        )  # Store in UTC for consistent timezone conversion
+        self.end_time = datetime.now(pytz.utc)  # Store in UTC for consistent timezone conversion
 
     def get_total_time(self):
         if self.start_time and self.end_time:
@@ -32,17 +29,13 @@ class EventLog:
     def get_start_time(self):
         if self.start_time:
             # Format to milliseconds
-            return self.start_time.astimezone(CALIFORNIA_TZ).strftime(
-                "%Y-%m-%d %H:%M:%S.%f"
-            )[:-3]
+            return self.start_time.astimezone(CALIFORNIA_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         return None
 
     def get_end_time(self):
         if self.end_time:
             # Format to milliseconds
-            return self.end_time.astimezone(CALIFORNIA_TZ).strftime(
-                "%Y-%m-%d %H:%M:%S.%f"
-            )[:-3]
+            return self.end_time.astimezone(CALIFORNIA_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
         return None
 
     def add_child_event(self, child_event):
@@ -81,15 +74,10 @@ class LoggingWrapper:
 
         if not self.event_stack and self.current_pipeline_stage:
             # Top-level event (directly under the pipeline stage)
-            if (
-                event_name
-                not in self.logging_dict[self.current_pipeline_stage]["time_usage"]
-            ):
+            if event_name not in self.logging_dict[self.current_pipeline_stage]["time_usage"]:
                 event = EventLog(event_name=event_name)
                 event.record_start_time()
-                self.logging_dict[self.current_pipeline_stage]["time_usage"][
-                    event_name
-                ] = event
+                self.logging_dict[self.current_pipeline_stage]["time_usage"][event_name] = event
                 self.event_stack.append(event)
             else:
                 self.logging_dict[self.current_pipeline_stage]["time_usage"][
@@ -102,9 +90,7 @@ class LoggingWrapper:
                 event = EventLog(event_name=event_name)
                 event.record_start_time()
                 parent_event.add_child_event(event)
-                self.logging_dict[self.current_pipeline_stage]["time_usage"][
-                    event_name
-                ] = event
+                self.logging_dict[self.current_pipeline_stage]["time_usage"][event_name] = event
                 self.event_stack.append(event)
             else:
                 parent_event.get_child_events()[event_name].record_start_time()
@@ -124,10 +110,7 @@ class LoggingWrapper:
             current_event_log = self.event_stack[-1]
             if event_name in current_event_log.get_child_events():
                 current_event_log.get_child_events()[event_name].record_end_time()
-            elif (
-                event_name
-                in self.logging_dict[self.current_pipeline_stage]["time_usage"]
-            ):
+            elif event_name in self.logging_dict[self.current_pipeline_stage]["time_usage"]:
                 self.logging_dict[self.current_pipeline_stage]["time_usage"][
                     event_name
                 ].record_end_time()
@@ -144,19 +127,17 @@ class LoggingWrapper:
         if not self.pipeline_stage_active:
             raise RuntimeError("No pipeline stage is currently active to end.")
 
-        self.logging_dict[self.current_pipeline_stage][
-            "lm_usage"
-        ] = self.lm_config.collect_and_reset_lm_usage()
-        self.logging_dict[self.current_pipeline_stage][
-            "lm_history"
-        ] = self.lm_config.collect_and_reset_lm_history()
+        self.logging_dict[self.current_pipeline_stage]["lm_usage"] = (
+            self.lm_config.collect_and_reset_lm_usage()
+        )
+        self.logging_dict[self.current_pipeline_stage]["lm_history"] = (
+            self.lm_config.collect_and_reset_lm_history()
+        )
         self.pipeline_stage_active = False
 
     def add_query_count(self, count):
         if not self.pipeline_stage_active:
-            raise RuntimeError(
-                "No pipeline stage is currently active to add query count."
-            )
+            raise RuntimeError("No pipeline stage is currently active to add query count.")
 
         self.logging_dict[self.current_pipeline_stage]["query_count"] += count
 
@@ -172,9 +153,7 @@ class LoggingWrapper:
     @contextmanager
     def log_pipeline_stage(self, pipeline_stage):
         if self.pipeline_stage_active:
-            print(
-                "A pipeline stage is already active, ending the current stage safely."
-            )
+            print("A pipeline stage is already active, ending the current stage safely.")
             self._pipeline_stage_end()
 
         start_time = time.time()

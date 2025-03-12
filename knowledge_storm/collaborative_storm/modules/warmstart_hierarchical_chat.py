@@ -1,28 +1,28 @@
 """
 Warm starts the Co-STORM system by conducting a background information search to establish a shared conceptual space with the user.
- 
-This stage functions as a mini-STORM, where multiple LLM agents are spawned with different perspectives to engage in multi-round conversations. 
+
+This stage functions as a mini-STORM, where multiple LLM agents are spawned with different perspectives to engage in multi-round conversations.
 The knowledge base (represented as a mind map) is initialized using the information gathered during these exchanges.
 
-Additionally, the system generates a first draft of the report, which is then used to create a concise and engaging conversation. 
+Additionally, the system generates a first draft of the report, which is then used to create a concise and engaging conversation.
 The synthesized conversation is presented to the user to help them quickly catch up on the system's current knowledge about the topic.
 """
 
-import dspy
 import concurrent.futures
 from threading import Lock
-from typing import List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Optional
 
-from .callback import BaseCallbackHandler
-from .collaborative_storm_utils import _get_answer_question_module_instance
-from .expert_generation import GenerateExpertModule
-from .grounded_question_answering import AnswerQuestionModule
+import dspy
+
 from ...dataclass import ConversationTurn, KnowledgeBase
 from ...interface import LMConfigs
 from ...logging_wrapper import LoggingWrapper
 from ...storm_wiki.modules.outline_generation import WritePageOutline
 from ...utils import ArticleTextProcessing as AP
-
+from .callback import BaseCallbackHandler
+from .collaborative_storm_utils import _get_answer_question_module_instance
+from .expert_generation import GenerateExpertModule
+from .grounded_question_answering import AnswerQuestionModule
 
 if TYPE_CHECKING:
     from ..engine import RunnerArgument
@@ -38,9 +38,7 @@ class WarmStartModerator(dspy.Signature):
     """
 
     topic = dspy.InputField(prefix="Topic for roundtable discussion: ", format=str)
-    history = dspy.InputField(
-        prefix="Experts you have already interacted with: ", format=str
-    )
+    history = dspy.InputField(prefix="Experts you have already interacted with: ", format=str)
     current_expert = dspy.InputField(prefix="Expert you are talking with:", format=str)
     question = dspy.OutputField(
         prefix="Next question for the expert you are talking with: ", format=str
@@ -90,9 +88,7 @@ class ReportToConversation(dspy.Module):
         topic = knowledge_base.topic
 
         with concurrent.futures.ThreadPoolExecutor() as executor:
-            future_to_node = {
-                executor.submit(process_node, node, topic): node for node in nodes
-            }
+            future_to_node = {executor.submit(process_node, node, topic): node for node in nodes}
             for future in concurrent.futures.as_completed(future_to_node):
                 node = future_to_node[future]
                 question, answer = future.result()
@@ -145,9 +141,7 @@ class WarmStartConversation(dspy.Module):
         self.logging_wrapper = logging_wrapper
         self.callback_handler = callback_handler
 
-    def format_dialogue_question_history_string(
-        self, conversation_history: List[ConversationTurn]
-    ):
+    def format_dialogue_question_history_string(self, conversation_history: List[ConversationTurn]):
         output = []
         for idx, turn in enumerate(conversation_history):
             info = turn.claim_to_make if turn.claim_to_make else turn.utterance
@@ -181,13 +175,9 @@ class WarmStartConversation(dspy.Module):
         )
 
     def forward(self, topic: str):
-        with self.logging_wrapper.log_event(
-            "warm start, perspective guided QA: identify experts"
-        ):
+        with self.logging_wrapper.log_event("warm start, perspective guided QA: identify experts"):
             # do background research, generate some experts
-            experts, background_seeking_dialogue = self.generate_warmstart_experts(
-                topic=topic
-            )
+            experts, background_seeking_dialogue = self.generate_warmstart_experts(topic=topic)
         # init list to store the dialogue history
         conversation_history: List[ConversationTurn] = []
         lock = Lock()
@@ -228,9 +218,7 @@ class WarmStartConversation(dspy.Module):
                                 message="\n".join(
                                     [
                                         f"Finish browsing {url}"
-                                        for url in [
-                                            i.url for i in answer.raw_retrieved_info
-                                        ]
+                                        for url in [i.url for i in answer.raw_retrieved_info]
                                     ]
                                 )
                             )
@@ -240,9 +228,7 @@ class WarmStartConversation(dspy.Module):
                         print(f"Error processing expert {expert}: {e}")
 
         # multi-thread conversation
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.max_thread
-        ) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_thread) as executor:
             futures = [
                 executor.submit(process_expert, expert)
                 for expert in experts[: min(len(experts), self.max_num_experts)]
@@ -251,9 +237,7 @@ class WarmStartConversation(dspy.Module):
 
         conversation_history = [background_seeking_dialogue] + conversation_history
 
-        return dspy.Prediction(
-            conversation_history=conversation_history, experts=experts
-        )
+        return dspy.Prediction(conversation_history=conversation_history, experts=experts)
 
 
 class GenerateWarmStartOutline(dspy.Signature):
@@ -318,9 +302,7 @@ class WarmStartModule:
         rm: Optional[dspy.Retrieve] = None,
         callback_handler: BaseCallbackHandler = None,
     ):
-        generate_expert_module = GenerateExpertModule(
-            engine=lm_config.discourse_manage_lm
-        )
+        generate_expert_module = GenerateExpertModule(engine=lm_config.discourse_manage_lm)
         self.warmstart_conv = WarmStartConversation(
             question_asking_lm=lm_config.question_asking_lm,
             generate_expert_module=generate_expert_module,
@@ -389,9 +371,7 @@ class WarmStartModule:
             )
             # insert information to knowledge base
             for turn in warm_start_conversation_history:
-                knowledge_base.update_from_conv_turn(
-                    conv_turn=turn, allow_create_new_node=False
-                )
+                knowledge_base.update_from_conv_turn(conv_turn=turn, allow_create_new_node=False)
         # knowledge base to report
         if self.callback_handler is not None:
             self.callback_handler.on_warmstart_update(

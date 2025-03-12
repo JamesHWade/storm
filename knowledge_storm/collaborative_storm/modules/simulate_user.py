@@ -1,9 +1,10 @@
-import dspy
-from typing import List, Union
+from typing import List
 
-from .collaborative_storm_utils import extract_and_remove_citations
+import dspy
+
 from ...dataclass import ConversationTurn
 from ...storm_wiki.modules.knowledge_curation import AskQuestionWithPersona
+from .collaborative_storm_utils import extract_and_remove_citations
 
 
 class GenSimulatedUserUtterance(dspy.Module):

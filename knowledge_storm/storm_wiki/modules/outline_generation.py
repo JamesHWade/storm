@@ -1,11 +1,11 @@
-from typing import Union, Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import dspy
 
-from .callback import BaseCallbackHandler
-from .storm_dataclass import StormInformationTable, StormArticle
 from ...interface import OutlineGenerationModule
 from ...utils import ArticleTextProcessing
+from .callback import BaseCallbackHandler
+from .storm_dataclass import StormArticle, StormInformationTable
 
 
 class StormOutlineGenerationModule(OutlineGenerationModule):
@@ -111,13 +111,9 @@ class WriteOutline(dspy.Module):
                     self.draft_page_outline(topic=topic).outline
                 )
                 if callback_handler:
-                    callback_handler.on_direct_outline_generation_end(
-                        outline=old_outline
-                    )
+                    callback_handler.on_direct_outline_generation_end(outline=old_outline)
             outline = ArticleTextProcessing.clean_up_outline(
-                self.write_page_outline(
-                    topic=topic, old_outline=old_outline, conv=conv
-                ).outline
+                self.write_page_outline(topic=topic, old_outline=old_outline, conv=conv).outline
             )
             if callback_handler:
                 callback_handler.on_outline_refinement_end(outline=outline)

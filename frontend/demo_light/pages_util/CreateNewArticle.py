@@ -5,7 +5,6 @@ import demo_util
 import streamlit as st
 from demo_util import (
     DemoFileIOHelper,
-    DemoTextProcessingHelper,
     DemoUIHelper,
     truncate_filename,
 )
@@ -34,23 +33,17 @@ def handle_not_started():
                 ]:
                     if not st.session_state["page3_topic"].strip():
                         pass_appropriateness_check = False
-                        st.session_state["page3_warning_message"] = (
-                            "topic could not be empty"
-                        )
+                        st.session_state["page3_warning_message"] = "topic could not be empty"
 
                     st.session_state["page3_topic_name_cleaned"] = (
-                        st.session_state["page3_topic"]
-                        .replace(" ", "_")
-                        .replace("/", "_")
+                        st.session_state["page3_topic"].replace(" ", "_").replace("/", "_")
                     )
                     st.session_state["page3_topic_name_truncated"] = truncate_filename(
                         st.session_state["page3_topic_name_cleaned"]
                     )
                     if not pass_appropriateness_check:
                         st.session_state["page3_write_article_state"] = "not started"
-                        alert = st.warning(
-                            st.session_state["page3_warning_message"], icon="⚠️"
-                        )
+                        alert = st.warning(st.session_state["page3_warning_message"], icon="⚠️")
                         time.sleep(5)
                         alert.empty()
                     else:

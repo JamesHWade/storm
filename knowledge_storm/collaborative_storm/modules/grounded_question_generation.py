@@ -1,23 +1,24 @@
 """
 This module handles question generation within the Co-STORM framework, specifically designed to support the Moderator role.
 
-The Moderator generates insightful, thought-provoking questions that introduce new directions into the conversation. 
+The Moderator generates insightful, thought-provoking questions that introduce new directions into the conversation.
 By leveraging uncited or unused snippets of information retrieved during the discussion, the Moderator ensures the conversation remains dynamic and avoids repetitive or overly niche topics.
 
 For more detailed information, refer to Section 3.5 of the Co-STORM paper: https://www.arxiv.org/pdf/2408.15232.
 """
 
-import dspy
-from typing import List, Union
+from typing import List
 
-from .collaborative_storm_utils import (
-    format_search_results,
-    extract_and_remove_citations,
-    keep_first_and_last_paragraph,
-    extract_cited_storm_info,
-)
+import dspy
+
 from ...dataclass import ConversationTurn, KnowledgeBase
 from ...interface import Information
+from .collaborative_storm_utils import (
+    extract_and_remove_citations,
+    extract_cited_storm_info,
+    format_search_results,
+    keep_first_and_last_paragraph,
+)
 
 
 class KnowledgeBaseSummmary(dspy.Signature):
@@ -39,13 +40,9 @@ class ConvertUtteranceStyle(dspy.Signature):
     """
 
     expert = dspy.InputField(prefix="You are inivited as: ", format=str)
-    action = dspy.InputField(
-        prefix="You want to contribute to conversation by: ", format=str
-    )
+    action = dspy.InputField(prefix="You want to contribute to conversation by: ", format=str)
     prev = dspy.InputField(prefix="Previous speaker said: ", format=str)
-    content = dspy.InputField(
-        prefix="Question or response you want to say: ", format=str
-    )
+    content = dspy.InputField(prefix="Question or response you want to say: ", format=str)
     utterance = dspy.OutputField(
         prefix="Your utterance (keep the information as much as you can with citations, prefer shorter answers without loss of information): ",
         format=str,
@@ -62,9 +59,7 @@ class GroundedQuestionGeneration(dspy.Signature):
     topic = dspy.InputField(prefix="topic: ", format=str)
     summary = dspy.InputField(prefix="Discussion history: \n", format=str)
     information = dspy.InputField(prefix="Available information: \n", format=str)
-    last_utterance = dspy.InputField(
-        prefix="Last utterance in the conversation: \n", format=str
-    )
+    last_utterance = dspy.InputField(prefix="Last utterance in the conversation: \n", format=str)
     output = dspy.OutputField(
         prefix="Now give next discussion focus in the format of one sentence question:\n",
         format=str,

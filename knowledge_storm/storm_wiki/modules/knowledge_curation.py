@@ -2,21 +2,21 @@ import concurrent.futures
 import logging
 import os
 from concurrent.futures import as_completed
-from typing import Union, List, Tuple, Optional, Dict
+from typing import Dict, List, Optional, Tuple, Union
 
 import dspy
 
+from ...interface import Information, KnowledgeCurationModule, Retriever
+from ...utils import ArticleTextProcessing
 from .callback import BaseCallbackHandler
 from .persona_generator import StormPersonaGenerator
 from .storm_dataclass import DialogueTurn, StormInformationTable
-from ...interface import KnowledgeCurationModule, Retriever, Information
-from ...utils import ArticleTextProcessing
 
 try:
     from streamlit.runtime.scriptrunner import add_script_run_ctx
 
     streamlit_connection = True
-except ImportError as err:
+except ImportError:
     streamlit_connection = False
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -118,9 +118,7 @@ class WikiWriter(dspy.Module):
                     topic=topic, persona=persona, conv=conv
                 ).question
             else:
-                question = self.ask_question(
-                    topic=topic, persona=persona, conv=conv
-                ).question
+                question = self.ask_question(topic=topic, persona=persona, conv=conv).question
 
         return dspy.Prediction(question=question)
 
@@ -144,9 +142,7 @@ class AskQuestionWithPersona(dspy.Signature):
     """
 
     topic = dspy.InputField(prefix="Topic you want to write: ", format=str)
-    persona = dspy.InputField(
-        prefix="Your persona besides being a Wikipedia writer: ", format=str
-    )
+    persona = dspy.InputField(prefix="Your persona besides being a Wikipedia writer: ", format=str)
     conv = dspy.InputField(prefix="Conversation history:\n", format=str)
     question = dspy.OutputField(format=str)
 
@@ -221,14 +217,10 @@ class TopicExpert(dspy.Module):
                     info += "\n".join(f"[{n + 1}]: {s}" for s in r.snippets[:1])
                     info += "\n\n"
 
-                info = ArticleTextProcessing.limit_word_count_preserve_newline(
-                    info, 1000
-                )
+                info = ArticleTextProcessing.limit_word_count_preserve_newline(info, 1000)
 
                 try:
-                    answer = self.answer_question(
-                        topic=topic, conv=question, info=info
-                    ).answer
+                    answer = self.answer_question(topic=topic, conv=question, info=info).answer
                     answer = ArticleTextProcessing.remove_uncompleted_sentences_with_citations(
                         answer
                     )
@@ -239,9 +231,7 @@ class TopicExpert(dspy.Module):
                 # When no information is found, the expert shouldn't hallucinate.
                 answer = "Sorry, I cannot find information for this question. Please ask another question."
 
-        return dspy.Prediction(
-            queries=queries, searched_results=searched_results, answer=answer
-        )
+        return dspy.Prediction(queries=queries, searched_results=searched_results, answer=answer)
 
 
 class StormKnowledgeCurationModule(KnowledgeCurationModule):
@@ -279,9 +269,7 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
         )
 
     def _get_considered_personas(self, topic: str, max_num_persona) -> List[str]:
-        return self.persona_generator.generate_persona(
-            topic=topic, max_num_persona=max_num_persona
-        )
+        return self.persona_generator.generate_persona(topic=topic, max_num_persona=max_num_persona)
 
     def _run_conversation(
         self,
@@ -326,8 +314,7 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_persona = {
-                executor.submit(run_conv, persona): persona
-                for persona in considered_personas
+                executor.submit(run_conv, persona): persona for persona in considered_personas
             }
 
             if streamlit_connection:
@@ -387,7 +374,5 @@ class StormKnowledgeCurationModule(KnowledgeCurationModule):
         information_table = StormInformationTable(conversations)
         callback_handler.on_information_gathering_end()
         if return_conversation_log:
-            return information_table, StormInformationTable.construct_log_dict(
-                conversations
-            )
+            return information_table, StormInformationTable.construct_log_dict(conversations)
         return information_table

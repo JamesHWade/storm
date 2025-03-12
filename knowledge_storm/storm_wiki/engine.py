@@ -2,19 +2,19 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Union, Literal, Optional
+from typing import Literal, Optional
 
 import dspy
 
+from ..interface import Engine, LMConfigs, Retriever
+from ..utils import FileIOHelper, makeStringRed, truncate_filename
 from .modules.article_generation import StormArticleGenerationModule
 from .modules.article_polish import StormArticlePolishingModule
 from .modules.callback import BaseCallbackHandler
 from .modules.knowledge_curation import StormKnowledgeCurationModule
 from .modules.outline_generation import StormOutlineGenerationModule
 from .modules.persona_generator import StormPersonaGenerator
-from .modules.storm_dataclass import StormInformationTable, StormArticle
-from ..interface import Engine, LMConfigs, Retriever
-from ..utils import FileIOHelper, makeStringRed, truncate_filename
+from .modules.storm_dataclass import StormArticle, StormInformationTable
 
 
 class STORMWikiLMConfigs(LMConfigs):
@@ -132,9 +132,7 @@ class STORMWikiRunnerArguments:
     )
     max_conv_turn: int = field(
         default=3,
-        metadata={
-            "help": "Maximum number of questions in conversational question asking."
-        },
+        metadata={"help": "Maximum number of questions in conversational question asking."},
     )
     max_perspective: int = field(
         default=3,
@@ -170,17 +168,13 @@ class STORMWikiRunnerArguments:
 class STORMWikiRunner(Engine):
     """STORM Wiki pipeline runner."""
 
-    def __init__(
-        self, args: STORMWikiRunnerArguments, lm_configs: STORMWikiLMConfigs, rm
-    ):
+    def __init__(self, args: STORMWikiRunnerArguments, lm_configs: STORMWikiLMConfigs, rm):
         super().__init__(lm_configs=lm_configs)
         self.args = args
         self.lm_configs = lm_configs
 
         self.retriever = Retriever(rm=rm, max_thread=self.args.max_thread_num)
-        storm_persona_generator = StormPersonaGenerator(
-            self.lm_configs.question_asker_lm
-        )
+        storm_persona_generator = StormPersonaGenerator(self.lm_configs.question_asker_lm)
         self.storm_knowledge_curation_module = StormKnowledgeCurationModule(
             retriever=self.retriever,
             persona_generator=storm_persona_generator,
@@ -244,9 +238,7 @@ class STORMWikiRunner(Engine):
             return_draft_outline=True,
             callback_handler=callback_handler,
         )
-        outline.dump_outline_to_file(
-            os.path.join(self.article_output_dir, "storm_gen_outline.txt")
-        )
+        outline.dump_outline_to_file(os.path.join(self.article_output_dir, "storm_gen_outline.txt"))
         draft_outline.dump_outline_to_file(
             os.path.join(self.article_output_dir, "direct_gen_outline.txt")
         )
@@ -293,28 +285,20 @@ class STORMWikiRunner(Engine):
         2. Dumping the LLM call history.
         """
         config_log = self.lm_configs.log()
-        FileIOHelper.dump_json(
-            config_log, os.path.join(self.article_output_dir, "run_config.json")
-        )
+        FileIOHelper.dump_json(config_log, os.path.join(self.article_output_dir, "run_config.json"))
 
         llm_call_history = self.lm_configs.collect_and_reset_lm_history()
-        with open(
-            os.path.join(self.article_output_dir, "llm_call_history.jsonl"), "w"
-        ) as f:
+        with open(os.path.join(self.article_output_dir, "llm_call_history.jsonl"), "w") as f:
             for call in llm_call_history:
                 if "kwargs" in call:
-                    call.pop(
-                        "kwargs"
-                    )  # All kwargs are dumped together to run_config.json.
+                    call.pop("kwargs")  # All kwargs are dumped together to run_config.json.
                 f.write(json.dumps(call) + "\n")
 
     def _load_information_table_from_local_fs(self, information_table_local_path):
         assert os.path.exists(information_table_local_path), makeStringRed(
             f"{information_table_local_path} not exists. Please set --do-research argument to prepare the conversation_log.json for this topic."
         )
-        return StormInformationTable.from_conversation_log_file(
-            information_table_local_path
-        )
+        return StormInformationTable.from_conversation_log_file(information_table_local_path)
 
     def _load_outline_from_local_fs(self, topic, outline_local_path):
         assert os.path.exists(outline_local_path), makeStringRed(
@@ -322,9 +306,7 @@ class STORMWikiRunner(Engine):
         )
         return StormArticle.from_outline_file(topic=topic, file_path=outline_local_path)
 
-    def _load_draft_article_from_local_fs(
-        self, topic, draft_article_path, url_to_info_path
-    ):
+    def _load_draft_article_from_local_fs(self, topic, draft_article_path, url_to_info_path):
         assert os.path.exists(draft_article_path), makeStringRed(
             f"{draft_article_path} not exists. Please set --do-generate-article argument to prepare the storm_gen_article.txt for this topic."
         )
@@ -365,22 +347,15 @@ class STORMWikiRunner(Engine):
             remove_duplicate: If True, remove duplicated content.
             callback_handler: A callback handler to handle the intermediate results.
         """
-        assert (
-            do_research
-            or do_generate_outline
-            or do_generate_article
-            or do_polish_article
-        ), makeStringRed(
-            "No action is specified. Please set at least one of --do-research, --do-generate-outline, --do-generate-article, --do-polish-article"
+        assert do_research or do_generate_outline or do_generate_article or do_polish_article, (
+            makeStringRed(
+                "No action is specified. Please set at least one of --do-research, --do-generate-outline, --do-generate-article, --do-polish-article"
+            )
         )
 
         self.topic = topic
-        self.article_dir_name = truncate_filename(
-            topic.replace(" ", "_").replace("/", "_")
-        )
-        self.article_output_dir = os.path.join(
-            self.args.output_dir, self.article_dir_name
-        )
+        self.article_dir_name = truncate_filename(topic.replace(" ", "_").replace("/", "_"))
+        self.article_output_dir = os.path.join(self.args.output_dir, self.article_dir_name)
         os.makedirs(self.article_output_dir, exist_ok=True)
 
         # research module
@@ -424,12 +399,8 @@ class STORMWikiRunner(Engine):
         # article polishing module
         if do_polish_article:
             if draft_article is None:
-                draft_article_path = os.path.join(
-                    self.article_output_dir, "storm_gen_article.txt"
-                )
-                url_to_info_path = os.path.join(
-                    self.article_output_dir, "url_to_info.json"
-                )
+                draft_article_path = os.path.join(self.article_output_dir, "storm_gen_article.txt")
+                url_to_info_path = os.path.join(self.article_output_dir, "url_to_info.json")
                 draft_article = self._load_draft_article_from_local_fs(
                     topic=topic,
                     draft_article_path=draft_article_path,

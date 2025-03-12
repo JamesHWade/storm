@@ -4,7 +4,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 wiki_root_dir = os.path.dirname(os.path.dirname(script_dir))
 
 import demo_util
-from pages_util import MyArticles, CreateNewArticle
+from pages_util import CreateNewArticle, MyArticles
 from streamlit_float import *
 from streamlit_option_menu import option_menu
 
@@ -31,9 +31,7 @@ def main():
         st.session_state["rerun_requested"] = False
         st.rerun()
 
-    st.write(
-        "<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True
-    )
+    st.write("<style>div.block-container{padding-top:2rem;}</style>", unsafe_allow_html=True)
     menu_container = st.container()
     with menu_container:
         pages = ["My Articles", "Create New Article"]

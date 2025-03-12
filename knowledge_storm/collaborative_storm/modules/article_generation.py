@@ -1,9 +1,10 @@
-import dspy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Set, Union
+from typing import Set
 
-from .collaborative_storm_utils import clean_up_section
+import dspy
+
 from ...dataclass import KnowledgeBase, KnowledgeNode
+from .collaborative_storm_utils import clean_up_section
 
 
 class ArticleGenerationModule(dspy.Module):
@@ -36,9 +37,7 @@ class ArticleGenerationModule(dspy.Module):
             information.append(info_text)
         return "\n".join(information)
 
-    def gen_section(
-        self, topic: str, node: KnowledgeNode, knowledge_base: KnowledgeBase
-    ):
+    def gen_section(self, topic: str, node: KnowledgeNode, knowledge_base: KnowledgeBase):
         if node is None or len(node.content) == 0:
             return ""
         if (
@@ -53,9 +52,7 @@ class ArticleGenerationModule(dspy.Module):
         )
         with dspy.settings.context(lm=self.engine):
             synthesize_output = clean_up_section(
-                self.write_section(
-                    topic=topic, info=information, section=node.name
-                ).output
+                self.write_section(topic=topic, info=information, section=node.name).output
             )
         node.synthesize_output = synthesize_output
         node.need_regenerate_synthesize_output = False
@@ -80,8 +77,7 @@ class ArticleGenerationModule(dspy.Module):
         with ThreadPoolExecutor(max_workers=5) as executor:
             # Submit all tasks
             future_to_node = {
-                executor.submit(_node_generate_paragraph, node): node
-                for node in all_nodes
+                executor.submit(_node_generate_paragraph, node): node for node in all_nodes
             }
 
             # Collect the results as they complete

@@ -62,9 +62,7 @@ def my_articles_page():
                     if int(len(article_names) / batch_size) > 0
                     else 1
                 )
-                current_page = st.number_input(
-                    "Page", min_value=1, max_value=total_pages, step=1
-                )
+                current_page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
             with bottom_menu[0]:
                 st.markdown(f"Page **{current_page}** of **{total_pages}** ")
             # show article cards
@@ -97,9 +95,9 @@ def my_articles_page():
                     st.rerun()
     else:
         selected_article_name = st.session_state["page2_selected_my_article"]
-        selected_article_file_path_dict = st.session_state[
-            "page2_user_articles_file_path_dict"
-        ][selected_article_name]
+        selected_article_file_path_dict = st.session_state["page2_user_articles_file_path_dict"][
+            selected_article_name
+        ]
 
         demo_util.display_article_page(
             selected_article_name=selected_article_name,

@@ -1,21 +1,22 @@
-import dspy
 from itertools import zip_longest
+from typing import TYPE_CHECKING, List, Optional
+
+import dspy
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-from typing import List, Optional, TYPE_CHECKING
 
-from .callback import BaseCallbackHandler
-from .collaborative_storm_utils import (
-    extract_storm_info_snippet,
-    _get_answer_question_module_instance,
-)
-from .costorm_expert_utterance_generator import CoStormExpertUtteranceGenerationModule
-from .grounded_question_generation import GroundedQuestionGenerationModule
-from .simulate_user import GenSimulatedUserUtterance
 from ...dataclass import ConversationTurn, KnowledgeBase
 from ...encoder import Encoder
 from ...interface import Agent, Information, LMConfigs
 from ...logging_wrapper import LoggingWrapper
+from .callback import BaseCallbackHandler
+from .collaborative_storm_utils import (
+    _get_answer_question_module_instance,
+    extract_storm_info_snippet,
+)
+from .costorm_expert_utterance_generator import CoStormExpertUtteranceGenerationModule
+from .grounded_question_generation import GroundedQuestionGenerationModule
+from .simulate_user import GenSimulatedUserUtterance
 
 if TYPE_CHECKING:
     from ..engine import RunnerArgument
@@ -55,13 +56,9 @@ class CoStormExpert(Agent):
         self.runner_argument = runner_argument
         self.logging_wrapper = logging_wrapper
         self.callback_handler = callback_handler
-        self.costorm_agent_utterance_generator = (
-            self._get_costorm_expert_utterance_generator(rm=rm)
-        )
+        self.costorm_agent_utterance_generator = self._get_costorm_expert_utterance_generator(rm=rm)
 
-    def _get_costorm_expert_utterance_generator(
-        self, rm: Optional[dspy.Retrieve] = None
-    ):
+    def _get_costorm_expert_utterance_generator(self, rm: Optional[dspy.Retrieve] = None):
         return CoStormExpertUtteranceGenerationModule(
             action_planning_lm=self.lm_config.discourse_manage_lm,
             utterance_polishing_lm=self.lm_config.utterance_polishing_lm,
@@ -86,9 +83,7 @@ class CoStormExpert(Agent):
             if self.callback_handler is not None:
                 self.callback_handler.on_expert_action_planning_start()
             conversation_summary = knowledge_base.get_knowledge_base_summary()
-        with self.logging_wrapper.log_event(
-            "CoStormExpert.generate_utterance generate utterance"
-        ):
+        with self.logging_wrapper.log_event("CoStormExpert.generate_utterance generate utterance"):
             last_conv_turn = conversation_history[-1]
             conv_turn = self.costorm_agent_utterance_generator(
                 topic=self.topic,
@@ -96,9 +91,7 @@ class CoStormExpert(Agent):
                 conversation_summary=conversation_summary,
                 last_conv_turn=last_conv_turn,
             ).conversation_turn
-        with self.logging_wrapper.log_event(
-            "CoStormExpert generate utterance: polish utterance"
-        ):
+        with self.logging_wrapper.log_event("CoStormExpert generate utterance: polish utterance"):
             if self.callback_handler is not None:
                 self.callback_handler.on_expert_utterance_polishing_start()
             self.costorm_agent_utterance_generator.polish_utterance(
@@ -141,13 +134,9 @@ class SimulatedUser(Agent):
         knowledge_base: KnowledgeBase,
         conversation_history: List[ConversationTurn],
     ):
-        assert (
-            self.intent is not None and self.intent
-        ), "Simulate user intent is not initialized."
+        assert self.intent is not None and self.intent, "Simulate user intent is not initialized."
 
-        with self.logging_wrapper.log_event(
-            "SimulatedUser generate utternace: generate utterance"
-        ):
+        with self.logging_wrapper.log_event("SimulatedUser generate utternace: generate utterance"):
             utterance = self.gen_simulated_user_utterance(
                 topic=self.topic, intent=self.intent, conv_history=conversation_history
             )
@@ -220,9 +209,7 @@ class Moderator(Agent):
         query_embedding = self.encoder.encode(conv_turn.queries)
         cited_snippets_embedding = self.encoder.encode(cited_snippets)
         # calculate similarity
-        query_similarities = cosine_similarity(
-            unused_snippets_embeddings, query_embedding
-        )
+        query_similarities = cosine_similarity(unused_snippets_embeddings, query_embedding)
         max_query_similarity = np.max(query_similarities, axis=1)
         cited_snippets_similarity = np.max(
             cosine_similarity(unused_snippets_embeddings, cited_snippets_embedding),
@@ -260,9 +247,7 @@ class Moderator(Agent):
             if conv_turn.utterance_type == "Questioning":
                 break
             considered_conv_turn.append(conv_turn)
-            batch_snippets.extend(
-                sum([info.snippets for info in conv_turn.raw_retrieved_info], [])
-            )
+            batch_snippets.extend(sum([info.snippets for info in conv_turn.raw_retrieved_info], []))
             batch_snippets.append(conv_turn.claim_to_make)
             batch_snippets.extend(conv_turn.queries)
         self.encoder.encode(batch_snippets, max_workers=20)
@@ -287,9 +272,7 @@ class Moderator(Agent):
         knowledge_base: KnowledgeBase,
         conversation_history: List[ConversationTurn],
     ):
-        with self.logging_wrapper.log_event(
-            "Moderator generate utternace: get unused snippets"
-        ):
+        with self.logging_wrapper.log_event("Moderator generate utternace: get unused snippets"):
             unused_snippets: List[Information] = self._get_sorted_unused_snippets(
                 knowledge_base=knowledge_base, conversation_history=conversation_history
             )
@@ -367,9 +350,5 @@ class PureRAGAgent(Agent):
         knowledge_base: KnowledgeBase,
         conversation_history: List[ConversationTurn],
     ):
-        with self.logging_wrapper.log_event(
-            "PureRAGAgent generate utternace: generate utterance"
-        ):
-            return self._gen_utterance_from_question(
-                question=conversation_history[-1].utterance
-            )
+        with self.logging_wrapper.log_event("PureRAGAgent generate utternace: generate utterance"):
+            return self._gen_utterance_from_question(question=conversation_history[-1].utterance)

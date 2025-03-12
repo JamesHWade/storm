@@ -1,6 +1,6 @@
-import dspy
 import re
-from typing import Union
+
+import dspy
 
 
 class GenerateExpertGeneral(dspy.Signature):
@@ -55,18 +55,14 @@ class GenerateExpertModule(dspy.Module):
         trimmed_background = " ".join(trimmed_words)
         return f"{trimmed_background} [rest content omitted]."
 
-    def forward(
-        self, topic: str, num_experts: int, background_info: str = "", focus: str = ""
-    ):
+    def forward(self, topic: str, num_experts: int, background_info: str = "", focus: str = ""):
         with dspy.settings.context(lm=self.engine, show_guidelines=False):
             if not focus:
                 output = self.generate_expert_general(
                     topic=topic, background_info=background_info, topN=num_experts
                 ).experts
             else:
-                background_info = self.trim_background(
-                    background=background_info, max_words=100
-                )
+                background_info = self.trim_background(background=background_info, max_words=100)
                 output = self.generate_expert_w_focus(
                     topic=topic,
                     background_info=background_info,

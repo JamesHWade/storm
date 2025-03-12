@@ -1,17 +1,16 @@
+
 import dspy
-from typing import Union
 
-from .callback import BaseCallbackHandler
-from .collaborative_storm_utils import (
-    trim_output_after_hint,
-    extract_and_remove_citations,
-    keep_first_and_last_paragraph,
-)
-
-from .grounded_question_answering import AnswerQuestionModule
-from .grounded_question_generation import ConvertUtteranceStyle
 from ...dataclass import ConversationTurn
 from ...logging_wrapper import LoggingWrapper
+from .callback import BaseCallbackHandler
+from .collaborative_storm_utils import (
+    extract_and_remove_citations,
+    keep_first_and_last_paragraph,
+    trim_output_after_hint,
+)
+from .grounded_question_answering import AnswerQuestionModule
+from .grounded_question_generation import ConvertUtteranceStyle
 
 
 class GenExpertActionPlanning(dspy.Signature):
@@ -30,9 +29,7 @@ class GenExpertActionPlanning(dspy.Signature):
     topic = dspy.InputField(prefix="topic of discussion: ", format=str)
     expert = dspy.InputField(prefix="You are inivited as: ", format=str)
     summary = dspy.InputField(prefix="Discussion history: \n", format=str)
-    last_utterance = dspy.InputField(
-        prefix="Last utterance in the conversation: \n", format=str
-    )
+    last_utterance = dspy.InputField(prefix="Last utterance in the conversation: \n", format=str)
     resposne = dspy.OutputField(
         prefix="Now give your note. Start with one of [Original Question, Further Details, Information Request, Potential Answer] with one sentence description\n",
         format=str,
@@ -75,15 +72,9 @@ class CoStormExpertUtteranceGenerationModule(dspy.Module):
     ):
         # change utterance style
         action_type = conversation_turn.utterance_type
-        with self.logging_wrapper.log_event(
-            "RoundTableConversationModule.ConvertUtteranceStyle"
-        ):
-            with dspy.settings.context(
-                lm=self.utterance_polishing_lm, show_guidelines=False
-            ):
-                action_string = (
-                    f"{action_type} about: {conversation_turn.claim_to_make}"
-                )
+        with self.logging_wrapper.log_event("RoundTableConversationModule.ConvertUtteranceStyle"):
+            with dspy.settings.context(lm=self.utterance_polishing_lm, show_guidelines=False):
+                action_string = f"{action_type} about: {conversation_turn.claim_to_make}"
                 if action_type in ["Original Question", "Information Request"]:
                     action_string = f"{action_type}"
                 last_expert_utterance_wo_citation, _ = extract_and_remove_citations(
@@ -118,9 +109,7 @@ class CoStormExpertUtteranceGenerationModule(dspy.Module):
             with self.logging_wrapper.log_event(
                 "CoStormExpertUtteranceGenerationModule: GenExpertActionPlanning"
             ):
-                with dspy.settings.context(
-                    lm=self.action_planning_lm, show_guidelines=False
-                ):
+                with dspy.settings.context(lm=self.action_planning_lm, show_guidelines=False):
                     action = self.expert_action(
                         topic=topic,
                         expert=current_expert,
@@ -139,9 +128,7 @@ class CoStormExpertUtteranceGenerationModule(dspy.Module):
         if action_type == "Undefined":
             raise Exception(f"unexpected output: {action}")
         elif action_type in ["Further Details", "Potential Answer"]:
-            with self.logging_wrapper.log_event(
-                "RoundTableConversationModule: QuestionAnswering"
-            ):
+            with self.logging_wrapper.log_event("RoundTableConversationModule: QuestionAnswering"):
                 grounded_answer = self.answer_question_module(
                     topic=topic,
                     question=action_content,

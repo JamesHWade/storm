@@ -1,13 +1,14 @@
-import dspy
 import os
 import re
 import sys
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+
+import dspy
 import toml
-from typing import List, Tuple, Dict, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..engine import RunnerArgument
-from ...interface import Information, Retriever, LMConfigs
+from ...interface import Information, LMConfigs, Retriever
 from ...logging_wrapper import LoggingWrapper
 from ...rm import BingSearch
 
@@ -27,9 +28,7 @@ def extract_storm_info_snippet(info: Information, snippet_index: int) -> Informa
         raise ValueError("Snippet index out of range")
 
     new_snippets = [info.snippets[snippet_index]]
-    new_storm_info = Information(
-        info.url, info.description, new_snippets, info.title, info.meta
-    )
+    new_storm_info = Information(info.url, info.description, new_snippets, info.title, info.meta)
     return new_storm_info
 
 
@@ -55,9 +54,7 @@ def format_search_results(
     total_length = 0
 
     extracted_snippet_queue = []
-    max_snippets = (
-        max(len(info.snippets) for info in searched_results) if searched_results else 0
-    )
+    max_snippets = max(len(info.snippets) for info in searched_results) if searched_results else 0
     max_snippets = 1 if mode == "brief" else max_snippets
     abort = False
     included_snippets = set()
@@ -98,9 +95,7 @@ def extract_cited_storm_info(
     """
     cited_indices = set(map(int, re.findall(r"\[(\d+)\]", response)))
     cited_storm_info = {
-        index: info
-        for index, info in index_to_storm_info.items()
-        if index in cited_indices
+        index: info for index, info in index_to_storm_info.items() if index in cited_indices
     }
     return cited_storm_info
 
@@ -186,9 +181,7 @@ def keep_first_and_last_paragraph(text: str) -> str:
 
     first_paragraph = paragraphs[0]
     last_paragraph = "\n\n".join(paragraphs[-2:])
-    return (
-        f"{first_paragraph}\n\n[content omitted due to space limit]\n\n{last_paragraph}"
-    )
+    return f"{first_paragraph}\n\n[content omitted due to space limit]\n\n{last_paragraph}"
 
 
 def clean_up_section(text):
@@ -211,11 +204,7 @@ def clean_up_section(text):
                 summary_sec_flag = False
             else:
                 continue
-        if (
-            p.startswith("Overall")
-            or p.startswith("In summary")
-            or p.startswith("In conclusion")
-        ):
+        if p.startswith("Overall") or p.startswith("In summary") or p.startswith("In conclusion"):
             continue
         if "# Summary" in p or "# Conclusion" in p:
             summary_sec_flag = True

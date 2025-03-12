@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "knowledge-storm"
+version = "1.2.0"
+description = "STORM: A language model-powered knowledge curation engine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT License"}
+authors = [
+    {name = "Yijia Shao", email = "shaoyj@stanford.edu"},
+    {name = "Yucheng Jiang", email = "yuchengj@stanford.edu"},
+]
+
+dependencies = [
+    "dspy",
+    "wikipedia==1.4.0",
+    "sentence-transformers",
+    "toml",
+    "langchain-text-splitters",
+    "trafilatura",
+    "langchain-huggingface",
+    "qdrant-client",
+    "langchain-qdrant",
+    "numpy",
+    "litellm",
+    "diskcache",
+    "semanticscholar",
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+[project.urls]
+Homepage = "https://github.com/stanford-oval/storm"
+"Bug Tracker" = "https://github.com/stanford-oval/storm/issues"
+
+[tool.ruff]
+# Target Python 3.10.
+target-version = "py310"
+
+# Allow lines to be as long as 100 characters.
+line-length = 100
+
+[tool.ruff.lint]
+# Enable flake8-bugbear (`B`) rules, plus error checking, importing, whitespace, and complexity.
+select = ["E", "F", "B", "I", "W", "C90"]
+ignore = []
+
+[tool.ruff.format]
+# Use double quotes for strings.
+quote-style = "double"
+# Indent with 4 spaces.
+indent-style = "space"
+line-ending = "auto"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.10",
+]

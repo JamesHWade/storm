@@ -1,16 +1,17 @@
-import dspy
-from typing import Union, List
+from typing import List
 
-from .callback import BaseCallbackHandler
-from .collaborative_storm_utils import (
-    trim_output_after_hint,
-    format_search_results,
-    extract_cited_storm_info,
-    separate_citations,
-)
+import dspy
+
+from ...interface import Information
 from ...logging_wrapper import LoggingWrapper
 from ...utils import ArticleTextProcessing
-from ...interface import Information
+from .callback import BaseCallbackHandler
+from .collaborative_storm_utils import (
+    extract_cited_storm_info,
+    format_search_results,
+    separate_citations,
+    trim_output_after_hint,
+)
 
 
 class QuestionToQuery(dspy.Signature):
@@ -23,9 +24,7 @@ class QuestionToQuery(dspy.Signature):
     - query n"""
 
     topic = dspy.InputField(prefix="Topic context:", format=str)
-    question = dspy.InputField(
-        prefix="I want to collect information about: ", format=str
-    )
+    question = dspy.InputField(prefix="I want to collect information about: ", format=str)
     queries = dspy.OutputField(prefix="Queries: \n", format=str)
 
 
@@ -117,24 +116,18 @@ class AnswerQuestionModule(dspy.Module):
         # retrieve information
         if callback_handler is not None:
             callback_handler.on_expert_information_collection_start()
-        queries, searched_results = self.retrieve_information(
-            topic=topic, question=question
-        )
+        queries, searched_results = self.retrieve_information(topic=topic, question=question)
         if callback_handler is not None:
             callback_handler.on_expert_information_collection_end(searched_results)
         # format information string for answer generation
-        info_text, index_to_information_mapping = format_search_results(
-            searched_results, mode=mode
-        )
+        info_text, index_to_information_mapping = format_search_results(searched_results, mode=mode)
         answer = "Sorry, there is insufficient information to answer the question."
         # generate answer to the question
         if info_text:
             with self.logging_wrapper.log_event(
                 f"AnswerQuestionModule.answer_question ({hash(question)})"
             ):
-                with dspy.settings.context(
-                    lm=self.question_answering_lm, show_guidelines=False
-                ):
+                with dspy.settings.context(lm=self.question_answering_lm, show_guidelines=False):
                     answer = self.answer_question(
                         topic=topic, question=question, info=info_text, style=style
                     ).answer

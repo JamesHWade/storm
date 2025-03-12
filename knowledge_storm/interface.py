@@ -1,5 +1,4 @@
 import concurrent.futures
-import dspy
 import functools
 import hashlib
 import json
@@ -7,13 +6,13 @@ import logging
 import time
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from typing import Dict, List, Optional, Union, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Union
+
+import dspy
 
 from .utils import ArticleTextProcessing
 
-logging.basicConfig(
-    level=logging.INFO, format="%(name)s : %(levelname)-8s : %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(name)s : %(levelname)-8s : %(message)s")
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -163,9 +162,7 @@ class Article(ABC):
     def __init__(self, topic_name):
         self.root = ArticleSectionNode(topic_name)
 
-    def find_section(
-        self, node: ArticleSectionNode, name: str
-    ) -> Optional[ArticleSectionNode]:
+    def find_section(self, node: ArticleSectionNode, name: str) -> Optional[ArticleSectionNode]:
         """
         Return the node of the section given the section name.
 
@@ -247,9 +244,7 @@ class Article(ABC):
         if node is None:
             node = self.root
 
-        node.children[:] = [
-            child for child in node.children if self.prune_empty_nodes(child)
-        ]
+        node.children[:] = [child for child in node.children if self.prune_empty_nodes(child)]
 
         if (node.content is None or node.content == "") and not node.children:
             return None
@@ -272,8 +267,8 @@ class Retriever:
 
     def collect_and_reset_rm_usage(self):
         combined_usage = []
-        if hasattr(getattr(self, "rm"), "get_usage_and_reset"):
-            combined_usage.append(getattr(self, "rm").get_usage_and_reset())
+        if hasattr(self.rm, "get_usage_and_reset"):
+            combined_usage.append(self.rm.get_usage_and_reset())
 
         name_to_usage = {}
         for usage in combined_usage:
@@ -292,9 +287,7 @@ class Retriever:
         to_return = []
 
         def process_query(q):
-            retrieved_data_list = self.rm(
-                query_or_queries=[q], exclude_urls=exclude_urls
-            )
+            retrieved_data_list = self.rm(query_or_queries=[q], exclude_urls=exclude_urls)
             local_to_return = []
             for data in retrieved_data_list:
                 for i in range(len(data["snippets"])):
@@ -308,9 +301,7 @@ class Retriever:
                 local_to_return.append(storm_info)
             return local_to_return
 
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.max_thread
-        ) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_thread) as executor:
             results = list(executor.map(process_query, queries))
 
         for result in results:
@@ -452,9 +443,7 @@ class LMConfigs(ABC):
     def collect_and_reset_lm_usage(self):
         combined_usage = []
         for attr_name in self.__dict__:
-            if "_lm" in attr_name and hasattr(
-                getattr(self, attr_name), "get_usage_and_reset"
-            ):
+            if "_lm" in attr_name and hasattr(getattr(self, attr_name), "get_usage_and_reset"):
                 combined_usage.append(getattr(self, attr_name).get_usage_and_reset())
 
         model_name_to_usage = {}
@@ -463,9 +452,7 @@ class LMConfigs(ABC):
                 if model_name not in model_name_to_usage:
                     model_name_to_usage[model_name] = tokens
                 else:
-                    model_name_to_usage[model_name]["prompt_tokens"] += tokens[
-                        "prompt_tokens"
-                    ]
+                    model_name_to_usage[model_name]["prompt_tokens"] += tokens["prompt_tokens"]
                     model_name_to_usage[model_name]["completion_tokens"] += tokens[
                         "completion_tokens"
                     ]
@@ -502,9 +489,7 @@ class Engine(ABC):
             logger.info(f"{func.__name__} executed in {execution_time:.4f} seconds")
             self.lm_cost[func.__name__] = self.lm_configs.collect_and_reset_lm_usage()
             if hasattr(self, "retriever"):
-                self.rm_cost[func.__name__] = (
-                    self.retriever.collect_and_reset_rm_usage()
-                )
+                self.rm_cost[func.__name__] = self.retriever.collect_and_reset_rm_usage()
             return result
 
         return wrapper
@@ -585,7 +570,7 @@ class Agent(ABC):
         - The agent's role, perspective, and the knowledge base content will influence how the utterance is formulated.
     """
 
-    from .dataclass import KnowledgeBase, ConversationTurn
+    from .dataclass import ConversationTurn, KnowledgeBase
 
     def __init__(self, topic: str, role_name: str, role_description: str):
         self.topic = topic

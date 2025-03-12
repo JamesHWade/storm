@@ -2,14 +2,14 @@ import concurrent.futures
 import copy
 import logging
 from concurrent.futures import as_completed
-from typing import List, Union
+from typing import List
 
 import dspy
 
-from .callback import BaseCallbackHandler
-from .storm_dataclass import StormInformationTable, StormArticle
 from ...interface import ArticleGenerationModule, Information
 from ...utils import ArticleTextProcessing
+from .callback import BaseCallbackHandler
+from .storm_dataclass import StormArticle, StormInformationTable
 
 
 class StormArticleGenerationModule(ArticleGenerationModule):
@@ -76,9 +76,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
 
         section_output_dict_collection = []
         if len(sections_to_write) == 0:
-            logging.error(
-                f"No outline for {topic}. Will directly search with the topic."
-            )
+            logging.error(f"No outline for {topic}. Will directly search with the topic.")
             section_output_dict = self.generate_section(
                 topic=topic,
                 section_name=topic,
@@ -88,9 +86,7 @@ class StormArticleGenerationModule(ArticleGenerationModule):
             )
             section_output_dict_collection = [section_output_dict]
         else:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self.max_thread_num
-            ) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.max_thread_num) as executor:
                 future_to_sec_title = {}
                 for section_title in sections_to_write:
                     # We don't want to write a separate introduction section.
@@ -141,9 +137,7 @@ class ConvToSection(dspy.Module):
         self.write_section = dspy.Predict(WriteSection)
         self.engine = engine
 
-    def forward(
-        self, topic: str, outline: str, section: str, collected_info: List[Information]
-    ):
+    def forward(self, topic: str, outline: str, section: str, collected_info: List[Information]):
         info = ""
         for idx, storm_info in enumerate(collected_info):
             info += f"[{idx + 1}]\n" + "\n".join(storm_info.snippets)

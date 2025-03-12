@@ -1,10 +1,4 @@
-from typing import Union, List
 from urllib.parse import urlparse
-
-import dspy
-
-from ...interface import Retriever, Information
-from ...utils import ArticleTextProcessing
 
 # Internet source restrictions according to Wikipedia standard:
 # https://en.wikipedia.org/wiki/Wikipedia:Reliable_sources/Perennial_sources
@@ -94,7 +88,6 @@ GENERALLY_UNRELIABLE = {
     "Patheos",
     "An_Phoblacht",
     "The_Post_Millennial",
-    "arXiv",
     "bioRxiv",
     "medRxiv",
     "PeerJ Preprints",
