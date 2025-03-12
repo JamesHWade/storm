@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Callable, Union, List
+from typing import Callable, List, Union
 
 import backoff
 import dspy
@@ -34,9 +34,7 @@ class YouRM(dspy.Retrieve):
 
         return {"YouRM": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with You.com for self.k top passages for query or queries
 
         Args:
@@ -46,11 +44,7 @@ class YouRM(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
         collected_results = []
         for query in queries:
@@ -124,9 +118,7 @@ class BingSearch(dspy.Retrieve):
 
         return {"BingSearch": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with Bing for self.k top passages for query or queries
 
         Args:
@@ -136,11 +128,7 @@ class BingSearch(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
 
         url_to_results = {}
@@ -163,9 +151,7 @@ class BingSearch(dspy.Retrieve):
             except Exception as e:
                 logging.error(f"Error occurs when searching query {query}: {e}")
 
-        valid_url_to_snippets = self.webpage_helper.urls_to_snippets(
-            list(url_to_results.keys())
-        )
+        valid_url_to_snippets = self.webpage_helper.urls_to_snippets(list(url_to_results.keys()))
         collected_results = []
         for url in valid_url_to_snippets:
             r = url_to_results[url]
@@ -233,9 +219,7 @@ class VectorRM(dspy.Retrieve):
         if self.client is None:
             raise ValueError("Qdrant client is not initialized.")
         if self.client.collection_exists(collection_name=f"{self.collection_name}"):
-            print(
-                f"Collection {self.collection_name} exists. Loading the collection..."
-            )
+            print(f"Collection {self.collection_name} exists. Loading the collection...")
             self.qdrant = Qdrant(
                 client=self.client,
                 collection_name=self.collection_name,
@@ -313,11 +297,7 @@ class VectorRM(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
         collected_results = []
         for query in queries:
@@ -383,15 +363,9 @@ class StanfordOvalArxivRM(dspy.Retrieve):
                 f"Error: Unable to retrieve results. Status code: {response.status_code}"
             )
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         collected_results = []
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
 
         for query in queries:
             try:
@@ -470,9 +444,7 @@ class SerperRM(dspy.Retrieve):
             "Content-Type": "application/json",
         }
 
-        response = requests.request(
-            "POST", self.search_url, headers=headers, json=query_params
-        )
+        response = requests.request("POST", self.search_url, headers=headers, json=query_params)
 
         if response == None:
             raise RuntimeError(
@@ -498,11 +470,7 @@ class SerperRM(dspy.Retrieve):
         Returns:
             a list of dictionaries, each dictionary has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
 
         self.usage += len(queries)
         self.results = []
@@ -545,9 +513,7 @@ class SerperRM(dspy.Retrieve):
                 for organic in organic_results:
                     snippets = [organic.get("snippet")]
                     if self.ENABLE_EXTRA_SNIPPET_EXTRACTION:
-                        snippets.extend(
-                            valid_url_to_snippets.get(url, {}).get("snippets", [])
-                        )
+                        snippets.extend(valid_url_to_snippets.get(url, {}).get("snippets", []))
                     collected_results.append(
                         {
                             "snippets": snippets,
@@ -567,9 +533,7 @@ class SerperRM(dspy.Retrieve):
 
 
 class BraveRM(dspy.Retrieve):
-    def __init__(
-        self, brave_search_api_key=None, k=3, is_valid_source: Callable = None
-    ):
+    def __init__(self, brave_search_api_key=None, k=3, is_valid_source: Callable = None):
         super().__init__(k=k)
         if not brave_search_api_key and not os.environ.get("BRAVE_API_KEY"):
             raise RuntimeError(
@@ -593,9 +557,7 @@ class BraveRM(dspy.Retrieve):
 
         return {"BraveRM": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with api.search.brave.com for self.k top passages for query or queries
 
         Args:
@@ -605,11 +567,7 @@ class BraveRM(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
         collected_results = []
         for query in queries:
@@ -675,9 +633,7 @@ class SearXNG(dspy.Retrieve):
         self.usage = 0
         return {"SearXNG": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with SearxNG for self.k top passages for query or queries
 
         Args:
@@ -687,25 +643,17 @@ class SearXNG(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
         collected_results = []
         headers = (
-            {"Authorization": f"Bearer {self.searxng_api_key}"}
-            if self.searxng_api_key
-            else {}
+            {"Authorization": f"Bearer {self.searxng_api_key}"} if self.searxng_api_key else {}
         )
 
         for query in queries:
             try:
                 params = {"q": query, "format": "json"}
-                response = requests.get(
-                    self.searxng_api_url, headers=headers, params=params
-                )
+                response = requests.get(self.searxng_api_url, headers=headers, params=params)
                 results = response.json()
 
                 for r in results["results"]:
@@ -748,9 +696,7 @@ class DuckDuckGoSearchRM(dspy.Retrieve):
         try:
             from duckduckgo_search import DDGS
         except ImportError as err:
-            raise ImportError(
-                "Duckduckgo requires `pip install duckduckgo_search`."
-            ) from err
+            raise ImportError("Duckduckgo requires `pip install duckduckgo_search`.") from err
         self.k = k
         self.webpage_helper = WebPageHelper(
             min_char_count=min_char_count,
@@ -791,14 +737,10 @@ class DuckDuckGoSearchRM(dspy.Retrieve):
         max_tries=8,
     )
     def request(self, query: str):
-        results = self.ddgs.text(
-            query, max_results=self.k, backend=self.duck_duck_go_backend
-        )
+        results = self.ddgs.text(query, max_results=self.k, backend=self.duck_duck_go_backend)
         return results
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with DuckDuckGoSearch for self.k top passages for query or queries
         Args:
             query_or_queries (Union[str, List[str]]): The query or queries to search for.
@@ -806,11 +748,7 @@ class DuckDuckGoSearchRM(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
 
         collected_results = []
@@ -914,9 +852,7 @@ class TavilySearchRM(dspy.Retrieve):
         self.usage = 0
         return {"TavilySearchRM": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with TavilySearch for self.k top passages for query or queries
         Args:
             query_or_queries (Union[str, List[str]]): The query or queries to search for.
@@ -924,11 +860,7 @@ class TavilySearchRM(dspy.Retrieve):
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
 
         collected_results = []
@@ -1017,9 +949,7 @@ class GoogleSearch(dspy.Retrieve):
                 "You must supply google_cse_id or set the GOOGLE_CSE_ID environment variable"
             )
 
-        self.google_search_api_key = (
-            google_search_api_key or os.environ["GOOGLE_SEARCH_API_KEY"]
-        )
+        self.google_search_api_key = google_search_api_key or os.environ["GOOGLE_SEARCH_API_KEY"]
         self.google_cse_id = google_cse_id or os.environ["GOOGLE_CSE_ID"]
 
         if is_valid_source:
@@ -1027,9 +957,7 @@ class GoogleSearch(dspy.Retrieve):
         else:
             self.is_valid_source = lambda x: True
 
-        self.service = build(
-            "customsearch", "v1", developerKey=self.google_search_api_key
-        )
+        self.service = build("customsearch", "v1", developerKey=self.google_search_api_key)
         self.webpage_helper = WebPageHelper(
             min_char_count=min_char_count,
             snippet_chunk_size=snippet_chunk_size,
@@ -1042,9 +970,7 @@ class GoogleSearch(dspy.Retrieve):
         self.usage = 0
         return {"GoogleSearch": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search using Google Custom Search API for self.k top results for query or queries.
 
         Args:
@@ -1054,11 +980,7 @@ class GoogleSearch(dspy.Retrieve):
         Returns:
             A list of dicts, each dict has keys: 'title', 'url', 'snippet', 'description'.
         """
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
 
         url_to_results = {}
@@ -1076,10 +998,7 @@ class GoogleSearch(dspy.Retrieve):
                 )
 
                 for item in response.get("items", []):
-                    if (
-                        self.is_valid_source(item["link"])
-                        and item["link"] not in exclude_urls
-                    ):
+                    if self.is_valid_source(item["link"]) and item["link"] not in exclude_urls:
                         url_to_results[item["link"]] = {
                             "title": item["title"],
                             "url": item["link"],
@@ -1090,9 +1009,7 @@ class GoogleSearch(dspy.Retrieve):
             except Exception as e:
                 logging.error(f"Error occurred while searching query {query}: {e}")
 
-        valid_url_to_snippets = self.webpage_helper.urls_to_snippets(
-            list(url_to_results.keys())
-        )
+        valid_url_to_snippets = self.webpage_helper.urls_to_snippets(list(url_to_results.keys()))
         collected_results = []
         for url in valid_url_to_snippets:
             r = url_to_results[url]
@@ -1139,9 +1056,7 @@ class AzureAISearch(dspy.Retrieve):
                 "AzureAISearch requires `pip install azure-search-documents`."
             ) from err
 
-        if not azure_ai_search_api_key and not os.environ.get(
-            "AZURE_AI_SEARCH_API_KEY"
-        ):
+        if not azure_ai_search_api_key and not os.environ.get("AZURE_AI_SEARCH_API_KEY"):
             raise RuntimeError(
                 "You must supply azure_ai_search_api_key or set environment variable AZURE_AI_SEARCH_API_KEY"
             )
@@ -1159,9 +1074,7 @@ class AzureAISearch(dspy.Retrieve):
         else:
             self.azure_ai_search_url = os.environ["AZURE_AI_SEARCH_URL"]
 
-        if not azure_ai_search_index_name and not os.environ.get(
-            "AZURE_AI_SEARCH_INDEX_NAME"
-        ):
+        if not azure_ai_search_index_name and not os.environ.get("AZURE_AI_SEARCH_INDEX_NAME"):
             raise RuntimeError(
                 "You must supply azure_ai_search_index_name or set environment variable AZURE_AI_SEARCH_INDEX_NAME"
             )
@@ -1184,9 +1097,7 @@ class AzureAISearch(dspy.Retrieve):
 
         return {"AzureAISearch": usage}
 
-    def forward(
-        self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []
-    ):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
         """Search with Azure Open AI for self.k top passages for query or queries
 
         Args:
@@ -1203,11 +1114,7 @@ class AzureAISearch(dspy.Retrieve):
             raise ImportError(
                 "AzureAISearch requires `pip install azure-search-documents`."
             ) from err
-        queries = (
-            [query_or_queries]
-            if isinstance(query_or_queries, str)
-            else query_or_queries
-        )
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
         collected_results = []
 
@@ -1229,6 +1136,183 @@ class AzureAISearch(dspy.Retrieve):
                         "snippets": [result["chunk"]],
                     }
                     collected_results.append(document)
+            except Exception as e:
+                logging.error(f"Error occurs when searching query {query}: {e}")
+
+        return collected_results
+
+
+class SemanticScholarRM(dspy.Retrieve):
+    """Retrieve information from Semantic Scholar, a search engine for academic papers.
+
+    This retriever leverages the Semantic Scholar API to search for scholarly articles,
+    papers, and academic content. It's particularly useful for research-focused applications
+    and educational contexts.
+    """
+
+    def __init__(
+        self,
+        semantic_scholar_api_key=None,
+        k=3,
+        is_valid_source: Callable = None,
+        max_retries=8,
+        fields=None,
+        year_filter=None,
+    ):
+        """
+        Params:
+            semantic_scholar_api_key (str, optional): API key for Semantic Scholar, can be found by registering at
+                https://www.semanticscholar.org/product/api. If not provided, will use the environment variable
+                SEMANTIC_SCHOLAR_API_KEY or proceed without an API key (with rate limits).
+            k (int): Number of top results to retrieve.
+            is_valid_source (Callable, optional): Function that takes a URL and returns a boolean, used to
+                filter sources.
+            max_retries (int): Maximum number of retries for API requests.
+            fields (List[str], optional): Fields to include in the response. See Semantic Scholar API docs for details.
+            year_filter (dict, optional): Filter papers by publication year, e.g.,
+                {"start_year": 2020, "end_year": 2023}
+        """
+        super().__init__(k=k)
+        try:
+            import semanticscholar as ss
+        except ImportError as err:
+            raise ImportError("SemanticScholarRM requires `pip install semanticscholar`.") from err
+
+        # Default fields to retrieve for each paper
+        self.default_fields = [
+            "title",
+            "abstract",
+            "venue",
+            "year",
+            "authors",
+            "url",
+            "paperId",
+            "externalIds",
+            "publicationDate",
+            "citationCount",
+        ]
+
+        self.fields = fields if fields is not None else self.default_fields
+        self.year_filter = year_filter
+        self.max_retries = max_retries
+        self.usage = 0
+
+        # Configure API key if provided
+        if semantic_scholar_api_key:
+            self.api_key = semantic_scholar_api_key
+            self.client = ss.SemanticScholar(api_key=self.api_key)
+        elif os.environ.get("SEMANTIC_SCHOLAR_API_KEY"):
+            self.api_key = os.environ["SEMANTIC_SCHOLAR_API_KEY"]
+            self.client = ss.SemanticScholar(api_key=self.api_key)
+        else:
+            self.api_key = None
+            self.client = ss.SemanticScholar()
+            logging.warning(
+                "No Semantic Scholar API key provided. Using unauthenticated access with lower rate limits."
+            )
+
+        # If not None, is_valid_source shall be a function that takes a URL and returns a boolean.
+        if is_valid_source:
+            self.is_valid_source = is_valid_source
+        else:
+            self.is_valid_source = lambda x: True
+
+    def get_usage_and_reset(self):
+        usage = self.usage
+        self.usage = 0
+        return {"SemanticScholarRM": usage}
+
+    @backoff.on_exception(
+        backoff.expo,
+        (Exception,),
+        max_time=1000,
+        max_tries=8,
+    )
+    def _search_papers(self, query: str):
+        """Search for papers matching the query."""
+        params = {
+            "query": query,
+            "limit": self.k,
+            "fields": self.fields,
+        }
+
+        if self.year_filter:
+            params.update(self.year_filter)
+
+        return self.client.search_paper(**params)
+
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
+        """Search Semantic Scholar for academic papers related to query or queries.
+
+        Args:
+            query_or_queries (Union[str, List[str]]): The query or queries to search for.
+            exclude_urls (List[str]): A list of urls to exclude from the search results.
+
+        Returns:
+            a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
+        """
+        queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
+        self.usage += len(queries)
+
+        collected_results = []
+
+        for query in queries:
+            try:
+                results = self._search_papers(query)
+
+                if not results or not isinstance(results, list):
+                    logging.warning(f"No results or invalid response for query: {query}")
+                    continue
+
+                for paper in results:
+                    url = paper.get("url")
+                    if not url:
+                        # Fall back to S2 URL if external URL not available
+                        paper_id = paper.get("paperId")
+                        if paper_id:
+                            url = f"https://www.semanticscholar.org/paper/{paper_id}"
+                        else:
+                            continue  # Skip if no URL available
+
+                    if self.is_valid_source(url) and url not in exclude_urls:
+                        # Extract authors
+                        authors = paper.get("authors", [])
+                        author_names = [
+                            author.get("name", "") for author in authors if author.get("name")
+                        ]
+                        author_string = ", ".join(author_names)
+
+                        # Format publication info
+                        year = f" ({paper.get('year')})" if paper.get("year") else ""
+                        venue = f" - {paper.get('venue')}" if paper.get("venue") else ""
+
+                        # Create the description
+                        title = paper.get("title", "")
+                        abstract = paper.get("abstract", "")
+                        citations = (
+                            f" [Citations: {paper.get('citationCount')}]"
+                            if paper.get("citationCount") is not None
+                            else ""
+                        )
+
+                        # Create snippets with paper information
+                        snippets = []
+                        if abstract:
+                            snippets.append(abstract)
+
+                        # Add publication info to snippets
+                        pub_info = f"Authors: {author_string}{year}{venue}{citations}"
+                        if pub_info.strip():
+                            snippets.append(pub_info)
+
+                        # Format the result
+                        result = {
+                            "title": title,
+                            "description": abstract or title,
+                            "snippets": snippets,
+                            "url": url,
+                        }
+                        collected_results.append(result)
             except Exception as e:
                 logging.error(f"Error occurs when searching query {query}: {e}")
 
