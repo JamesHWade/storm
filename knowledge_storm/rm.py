@@ -1158,6 +1158,7 @@ class SemanticScholarRM(dspy.Retrieve):
         max_retries=8,
         fields=None,
         year_filter=None,
+        timeout=30,
     ):
         """
         Params:
@@ -1171,6 +1172,7 @@ class SemanticScholarRM(dspy.Retrieve):
             fields (List[str], optional): Fields to include in the response. See Semantic Scholar API docs for details.
             year_filter (dict, optional): Filter papers by publication year, e.g.,
                 {"start_year": 2020, "end_year": 2023}
+            timeout (int): Timeout in seconds for API requests.
         """
         super().__init__(k=k)
         try:
@@ -1195,18 +1197,19 @@ class SemanticScholarRM(dspy.Retrieve):
         self.fields = fields if fields is not None else self.default_fields
         self.year_filter = year_filter
         self.max_retries = max_retries
+        self.timeout = timeout
         self.usage = 0
 
         # Configure API key if provided
         if semantic_scholar_api_key:
             self.api_key = semantic_scholar_api_key
-            self.client = ss.SemanticScholar(api_key=self.api_key)
+            self.client = ss.SemanticScholar(api_key=self.api_key, timeout=self.timeout)
         elif os.environ.get("SEMANTIC_SCHOLAR_API_KEY"):
             self.api_key = os.environ["SEMANTIC_SCHOLAR_API_KEY"]
-            self.client = ss.SemanticScholar(api_key=self.api_key)
+            self.client = ss.SemanticScholar(api_key=self.api_key, timeout=self.timeout)
         else:
             self.api_key = None
-            self.client = ss.SemanticScholar()
+            self.client = ss.SemanticScholar(timeout=self.timeout)
             logging.warning(
                 "No Semantic Scholar API key provided. Using unauthenticated access with lower rate limits."
             )
@@ -1230,27 +1233,56 @@ class SemanticScholarRM(dspy.Retrieve):
     )
     def _search_papers(self, query: str):
         """Search for papers matching the query."""
-        params = {
-            "query": query,
-            "limit": self.k,
-            "fields": self.fields,
-        }
+        try:
+            # The semanticscholar package has a search_paper method that returns a list of papers
+            params = {
+                "query": query,
+                "limit": self.k * 2,  # Request more papers to compensate for potential filtering
+                "fields": self.fields,
+            }
+            
+            if self.year_filter:
+                if isinstance(self.year_filter, dict):
+                    # The API expects year as a parameter, not year_filter
+                    if "start_year" in self.year_filter and "end_year" in self.year_filter:
+                        params["year"] = f"{self.year_filter['start_year']}-{self.year_filter['end_year']}"
+                    elif "year" in self.year_filter:
+                        params["year"] = self.year_filter["year"]
 
-        if self.year_filter:
-            params.update(self.year_filter)
+            logging.info(f"Searching Semantic Scholar with params: {params}")
+            try:
+                results = self.client.search_paper(**params)
+                if results:
+                    logging.info(f"Got {len(results)} results from Semantic Scholar API")
+                else:
+                    logging.warning(f"No results returned from Semantic Scholar API for query: {query}")
+                return results
+            except Exception as api_error:
+                # Try a direct search with minimal parameters if the detailed search fails
+                logging.warning(f"Error with detailed search, trying simplified: {api_error}")
+                simplified_params = {"query": query, "limit": self.k}
+                results = self.client.search_paper(**simplified_params)
+                if results:
+                    logging.info(f"Got {len(results)} results from simplified search")
+                return results
+        except Exception as e:
+            logging.error(f"Error in _search_papers: {e}")
+            # Re-raise the exception so backoff can catch it
+            raise
 
-        return self.client.search_paper(**params)
-
-    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = []):
+    def forward(self, query_or_queries: Union[str, List[str]], exclude_urls: List[str] = None):
         """Search Semantic Scholar for academic papers related to query or queries.
 
         Args:
             query_or_queries (Union[str, List[str]]): The query or queries to search for.
-            exclude_urls (List[str]): A list of urls to exclude from the search results.
+            exclude_urls (List[str], optional): A list of urls to exclude from the search results.
 
         Returns:
             a list of Dicts, each dict has keys of 'description', 'snippets' (list of strings), 'title', 'url'
         """
+        if exclude_urls is None:
+            exclude_urls = []
+            
         queries = [query_or_queries] if isinstance(query_or_queries, str) else query_or_queries
         self.usage += len(queries)
 
@@ -1259,50 +1291,83 @@ class SemanticScholarRM(dspy.Retrieve):
         for query in queries:
             try:
                 results = self._search_papers(query)
-
-                if not results or not isinstance(results, list):
+                
+                if not results:
                     logging.warning(f"No results or invalid response for query: {query}")
                     continue
-
+                
                 for paper in results:
-                    url = paper.get("url")
-                    if not url:
-                        # Fall back to S2 URL if external URL not available
-                        paper_id = paper.get("paperId")
-                        if paper_id:
-                            url = f"https://www.semanticscholar.org/paper/{paper_id}"
-                        else:
-                            continue  # Skip if no URL available
-
-                    if self.is_valid_source(url) and url not in exclude_urls:
+                    try:
+                        # Extract paper attributes using direct attribute access
+                        # as the semanticscholar package returns Paper objects
+                        
+                        # Extract essential information about the paper
+                        title = getattr(paper, "title", "")
+                        abstract = getattr(paper, "abstract", "")
+                        paper_id = getattr(paper, "paperId", None)
+                        
+                        # Extract URL
+                        url = getattr(paper, "url", None)
+                        
+                        if not url:
+                            # Try to get URL from externalIds
+                            external_ids = getattr(paper, "externalIds", None)
+                            if external_ids:
+                                # Try DOI first
+                                doi = getattr(external_ids, "DOI", None)
+                                if doi:
+                                    url = f"https://doi.org/{doi}"
+                                # Then try ArXiv
+                                elif getattr(external_ids, "ArXiv", None):
+                                    arxiv_id = getattr(external_ids, "ArXiv", None)
+                                    if arxiv_id:
+                                        url = f"https://arxiv.org/abs/{arxiv_id}"
+                                    
+                            # Fall back to S2 URL if external URL not available
+                            if not url and paper_id:
+                                url = f"https://www.semanticscholar.org/paper/{paper_id}"
+                            
+                        if not url:
+                            logging.warning(f"No URL found for paper: {title}")
+                            continue
+                            
+                        if not self.is_valid_source(url) or url in exclude_urls:
+                            continue
+                            
                         # Extract authors
-                        authors = paper.get("authors", [])
-                        author_names = [
-                            author.get("name", "") for author in authors if author.get("name")
-                        ]
+                        authors = getattr(paper, "authors", [])
+                        author_names = []
+                        
+                        if authors:
+                            for author in authors:
+                                if hasattr(author, "name"):
+                                    author_name = getattr(author, "name", "")
+                                    if author_name:
+                                        author_names.append(author_name)
+                                
                         author_string = ", ".join(author_names)
 
                         # Format publication info
-                        year = f" ({paper.get('year')})" if paper.get("year") else ""
-                        venue = f" - {paper.get('venue')}" if paper.get("venue") else ""
+                        year = getattr(paper, "year", None)
+                        year_str = f" ({year})" if year else ""
+                        
+                        venue = getattr(paper, "venue", None)
+                        venue_str = f" - {venue}" if venue else ""
 
-                        # Create the description
-                        title = paper.get("title", "")
-                        abstract = paper.get("abstract", "")
-                        citations = (
-                            f" [Citations: {paper.get('citationCount')}]"
-                            if paper.get("citationCount") is not None
-                            else ""
-                        )
+                        citations = getattr(paper, "citationCount", None)
+                        citations_str = f" [Citations: {citations}]" if citations is not None else ""
 
                         # Create snippets with paper information
                         snippets = []
                         if abstract:
                             snippets.append(abstract)
+                        else:
+                            # If no abstract, create a minimal description based on title
+                            snippets.append(f"Title: {title}")
 
                         # Add publication info to snippets
-                        pub_info = f"Authors: {author_string}{year}{venue}{citations}"
-                        if pub_info.strip():
+                        pub_info = f"Authors: {author_string}{year_str}{venue_str}{citations_str}"
+                        if pub_info.strip() != "Authors: ":  # Only add if we have some info
                             snippets.append(pub_info)
 
                         # Format the result
@@ -1313,6 +1378,13 @@ class SemanticScholarRM(dspy.Retrieve):
                             "url": url,
                         }
                         collected_results.append(result)
+                        
+                        # Only collect up to k results
+                        if len(collected_results) >= self.k:
+                            break
+                    except Exception as paper_error:
+                        logging.error(f"Error processing paper: {paper_error}")
+                        continue
             except Exception as e:
                 logging.error(f"Error occurs when searching query {query}: {e}")
 
