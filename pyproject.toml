@@ -28,6 +28,7 @@ dependencies = [
     "litellm",
     "diskcache",
     "semanticscholar",
+    "mlflow>=2.20.3",
 ]
 
 classifiers = [
@@ -43,17 +44,6 @@ classifiers = [
 Homepage = "https://github.com/stanford-oval/storm"
 "Bug Tracker" = "https://github.com/stanford-oval/storm/issues"
 
-[tool.ruff]
-# Target Python 3.10.
-target-version = "py310"
-
-# Allow lines to be as long as 100 characters.
-line-length = 100
-
-[tool.ruff.lint]
-# Enable flake8-bugbear (`B`) rules, plus error checking, importing, whitespace, and complexity.
-select = ["E", "F", "B", "I", "W", "C90"]
-ignore = []
 
 [tool.ruff.format]
 # Use double quotes for strings.
@@ -64,5 +54,7 @@ line-ending = "auto"
 
 [dependency-groups]
 dev = [
+    "ipykernel>=6.29.5",
+    "pip>=25.0.1",
     "ruff>=0.9.10",
 ]
