@@ -1631,6 +1631,7 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "ipykernel" },
+    { name = "mlflow" },
     { name = "pip" },
     { name = "ruff" },
 ]
@@ -1656,6 +1657,7 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "ipykernel", specifier = ">=6.29.5" },
+    { name = "mlflow", specifier = ">=2.20.3" },
     { name = "pip", specifier = ">=25.0.1" },
     { name = "ruff", specifier = ">=0.9.10" },
 ]
