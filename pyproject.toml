@@ -55,6 +55,7 @@ line-ending = "auto"
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5",
+    "jupyter>=1.1.1",
     "mlflow>=2.20.3",
     "pip>=25.0.1",
     "ruff>=0.9.10",

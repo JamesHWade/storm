@@ -15,6 +15,7 @@ from .modules.co_storm_agents import (
     CoStormExpert,
     Moderator,
     PureRAGAgent,
+    Researcher,
     SimulatedUser,
 )
 from .modules.expert_generation import GenerateExpertModule
@@ -93,52 +94,6 @@ class CollaborativeStormLMConfigs(LMConfigs):
             )
             self.knowledge_base_lm = dspy.LM(
                 model="azure/gpt-4o", max_tokens=1000, **azure_kwargs, model_type="chat"
-            )
-        elif lm_type and lm_type == "together":
-            together_kwargs = {
-                "api_key": os.getenv("TOGETHER_API_KEY"),
-                "temperature": temperature,
-                "top_p": top_p,
-            }
-            self.question_answering_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=1000,
-                model_type="chat",
-                **together_kwargs,
-            )
-            self.discourse_manage_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=500,
-                model_type="chat",
-                **together_kwargs,
-            )
-            self.utterance_polishing_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=2000,
-                model_type="chat",
-                **together_kwargs,
-            )
-            self.warmstart_outline_gen_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=500,
-                model_type="chat",
-                **together_kwargs,
-            )
-            self.question_asking_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=300,
-                model_type="chat",
-                **together_kwargs,
-            )
-            self.knowledge_base_lm = dspy.LM(
-                model="together_ai/meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
-                max_tokens=1000,
-                model_type="chat",
-                **together_kwargs,
-            )
-        else:
-            raise Exception(
-                "No valid OpenAI API provider is provided. Cannot use default LLM configurations."
             )
 
     def set_question_answering_lm(self, model: dspy.LM):
@@ -400,20 +355,24 @@ class TurnPolicySpec:
 class DiscourseManager:
     def __init__(
         self,
-        logging_wrapper: LoggingWrapper,
-        lm_config: CollaborativeStormLMConfigs,
+        topic: str,
         runner_argument: RunnerArgument,
-        rm: dspy.Retrieve,
+        lm_config: CollaborativeStormLMConfigs,
         encoder: Encoder,
-        callback_handler: BaseCallbackHandler,
+        knowledge_base: KnowledgeBase,
+        logging_wrapper: LoggingWrapper,
+        rm: dspy.Retrieve,
+        callback_handler: BaseCallbackHandler = None,
     ):
         # parameter management
+        self.topic = topic
         self.lm_config = lm_config
         self.runner_argument = runner_argument
         self.logging_wrapper = logging_wrapper
         self.callback_handler = callback_handler
         self.rm = rm
         self.encoder = encoder
+        self.knowledge_base = knowledge_base
         # role management
         self.experts: List[CoStormExpert] = []
         self.simulated_user: SimulatedUser = SimulatedUser(
@@ -522,6 +481,29 @@ class DiscourseManager:
             agents.append(new_costorm_expert)
         return agents
 
+    def create_researcher(self, role_name: str, role_description: str):
+        """
+        Create a Researcher agent with the specified role name and description.
+        
+        Args:
+            role_name (str): The name of the researcher role (e.g., "Innovation Scientist").
+            role_description (str): A description of the researcher's approach and focus.
+            
+        Returns:
+            Researcher: A new Researcher agent configured for the current topic.
+        """
+        researcher = Researcher(
+            topic=self.runner_argument.topic,
+            role_name=role_name,
+            role_description=role_description,
+            lm_config=self.lm_config,
+            runner_argument=self.runner_argument,
+            logging_wrapper=self.logging_wrapper,
+            rm=self.rm,
+            callback_handler=self.callback_handler,
+        )
+        return researcher
+
     def _update_expert_list_from_utterance(self, focus: str, background_info: str):
         expert_names = self.generate_expert_module(
             topic=self.runner_argument.topic,
@@ -579,50 +561,303 @@ class DiscourseManager:
             next_turn_policy.should_polish_utterance = True
         return next_turn_policy
 
+    def generate_potential_answers(self):
+        """
+        Generate a potential answer from the specified number of experts on the panel.
+
+        Args:
+            expert_indices (Optional[List[int]], optional): Each index corresponds to each expert in the panel. Defaults to None,
+                                                          which means all experts on the panel will generate answers.
+
+        Returns:
+            _type_: _description_
+        """
+        return self.invoke_experts(agent_indices=list(range(len(self.experts))))
+
+    def add_researcher_to_discussion(self, role_name: str = "Research Scientist", role_description: str = "Specializes in generating novel research ideas and experimental plans"):
+        """
+        Add a Researcher agent to the current discussion.
+        
+        Args:
+            role_name (str, optional): The name of the researcher role. Defaults to "Research Scientist".
+            role_description (str, optional): Description of the researcher's focus. Defaults to a general description.
+            
+        Returns:
+            int: The index of the newly added researcher in the experts list.
+        """
+        researcher = self.create_researcher(role_name, role_description)
+        self.experts.append(researcher)
+        return len(self.experts) - 1  # Return the index of the newly added researcher
+
+    def query_raw(self, question_text: str):
+        """Take a question and answer it with the PureRAG method without discourse management"""
+        if self.purerag_agent is None:
+            self.purerag_agent = PureRAGAgent(
+                topic=self.runner_argument.topic,
+                role_name="Assistant",
+                role_description="AI assistant that answers user questions",
+                lm_config=self.lm_config,
+                runner_argument=self.runner_argument,
+                logging_wrapper=self.logging_wrapper,
+                rm=self.rm,
+            )
+
 
 class CoStormRunner:
     def __init__(
         self,
+        args: RunnerArgument,
         lm_config: CollaborativeStormLMConfigs,
-        runner_argument: RunnerArgument,
-        logging_wrapper: LoggingWrapper,
+        encoder: Encoder,
         rm: Optional[dspy.Retrieve] = None,
-        encoder: Optional[Encoder] = None,
         callback_handler: BaseCallbackHandler = None,
     ):
-        self.runner_argument = runner_argument
+        self.logging_wrapper = LoggingWrapper(lm_config)
+        self.args = args
         self.lm_config = lm_config
-        self.logging_wrapper = logging_wrapper
+        self.encoder = encoder
+        self.rm = rm
+
+        # set callback
         self.callback_handler = callback_handler
-        if rm is None:
-            self.rm = BingSearch(k=runner_argument.retrieve_top_k)
-        else:
-            self.rm = rm
-        if encoder is None:
-            self.encoder = Encoder()
-        else:
-            self.encoder = encoder
+
+        # Create retriever if not provided
+        if self.rm is None:
+            self.rm = BingSearch(
+                bing_search_api_key=os.getenv("BING_SEARCH_API_KEY"),
+                k=args.retrieve_top_k,
+            )
+
+        # init knowledge base with required parameters
+        self.knowledge_base = KnowledgeBase(
+            topic=args.topic,
+            knowledge_base_lm=lm_config.knowledge_base_lm,
+            node_expansion_trigger_count=args.node_expansion_trigger_count,
+            encoder=encoder
+        )
+        self.report = None
         self.conversation_history = []
         self.warmstart_conv_archive = []
-        self.knowledge_base = KnowledgeBase(
-            topic=self.runner_argument.topic,
-            knowledge_base_lm=self.lm_config.knowledge_base_lm,
-            node_expansion_trigger_count=self.runner_argument.node_expansion_trigger_count,
-            encoder=self.encoder,
-        )
+
+        # init discourse manager
         self.discourse_manager = DiscourseManager(
-            lm_config=self.lm_config,
-            runner_argument=self.runner_argument,
+            topic=args.topic,
+            runner_argument=args,
+            lm_config=lm_config,
+            encoder=encoder,
+            knowledge_base=self.knowledge_base,
             logging_wrapper=self.logging_wrapper,
-            rm=self.rm,
-            encoder=self.encoder,
+            rm=rm,
             callback_handler=callback_handler,
         )
-        self.report = None  # Initialize the report attribute
+        
+    def add_researcher(self, role_name: str = "Research Scientist", role_description: str = "Specializes in generating novel research ideas and experimental plans"):
+        """
+        Add a Researcher agent to the current discussion.
+        
+        Args:
+            role_name (str, optional): The name of the researcher role. Defaults to "Research Scientist".
+            role_description (str, optional): Description of the researcher's focus. Defaults to a general description.
+            
+        Returns:
+            int: The index of the newly added researcher in the experts list.
+        """
+        return self.discourse_manager.add_researcher_to_discussion(role_name, role_description)
+
+    def get_researcher(self, create_if_missing=True):
+        """
+        Get a Researcher agent from the current experts list.
+        
+        Args:
+            create_if_missing (bool, optional): If True, creates a new Researcher if none exists. Defaults to True.
+            
+        Returns:
+            Researcher: A Researcher agent instance, or None if no Researcher exists and create_if_missing is False.
+        """
+        # Look for an existing researcher in the experts list
+        for expert in self.discourse_manager.experts:
+            if isinstance(expert, Researcher):
+                return expert
+                
+        # Create a new researcher if requested
+        if create_if_missing:
+            researcher_index = self.add_researcher()
+            return self.discourse_manager.experts[researcher_index]
+        
+        return None
+    
+    def generate_research_idea(self, context=None):
+        """
+        Generate a novel research idea based on the current knowledge base and conversation.
+        
+        Args:
+            context (str, optional): Additional context to consider when generating the idea.
+                                    If None, the last utterance from the conversation history is used.
+                                    
+        Returns:
+            str: A novel research idea description
+        """
+        # Wrap the entire operation in a pipeline stage context
+        with self.logging_wrapper.log_pipeline_stage("research idea generation"):
+            researcher = self.get_researcher()
+            
+            # Get the knowledge base summary
+            knowledge_summary = self.knowledge_base.get_knowledge_base_summary()
+            
+            # Use the provided context or the last utterance from conversation history
+            last_utterance = context
+            if last_utterance is None and hasattr(self, 'conversation_history') and self.conversation_history:
+                last_utterance = self.conversation_history[-1].utterance
+            
+            # Generate the idea
+            return researcher.generate_idea(
+                topic=self.args.topic,
+                knowledge_summary=knowledge_summary,
+                last_utterance=last_utterance or ""
+            )
+    
+    def assess_research_idea(self, idea):
+        """
+        Assess a research idea for novelty, feasibility, value, and relevance.
+        
+        Args:
+            idea (str): The research idea to assess
+            
+        Returns:
+            str: A detailed assessment of the idea
+        """
+        # Wrap in pipeline stage context
+        with self.logging_wrapper.log_pipeline_stage("research idea assessment"):
+            researcher = self.get_researcher()
+            return researcher.assess_idea(
+                idea=idea,
+                topic=self.args.topic
+            )
+    
+    def create_experimental_plan(self, idea, assessment=None):
+        """
+        Create an experimental plan to test a research idea.
+        
+        Args:
+            idea (str): The research idea to develop a plan for
+            assessment (str, optional): An assessment of the idea. If None, one will be generated.
+            
+        Returns:
+            str: A detailed experimental plan
+        """
+        # Wrap in pipeline stage context
+        with self.logging_wrapper.log_pipeline_stage("experimental plan creation"):
+            researcher = self.get_researcher()
+            
+            # Generate an assessment if none is provided
+            if assessment is None:
+                assessment = self.assess_research_idea(idea)
+                
+            return researcher.create_experimental_plan(
+                idea=idea,
+                assessment=assessment
+            )
+    
+    def refine_research_idea(self, original_idea, feedback):
+        """
+        Refine a research idea based on specific feedback.
+        
+        Args:
+            original_idea (str): The original research idea to refine
+            feedback (str): Feedback containing critiques, suggestions, or questions about the idea
+            
+        Returns:
+            str: A refined version of the research idea that addresses the feedback
+        """
+        # Wrap in pipeline stage context
+        with self.logging_wrapper.log_pipeline_stage("research idea refinement"):
+            researcher = self.get_researcher()
+            return researcher.refine_idea(
+                original_idea=original_idea,
+                feedback=feedback,
+                topic=self.args.topic
+            )
+    
+    def research_pipeline(self, context=None, add_to_conversation=True, refine_idea_from_assessment=False):
+        """
+        Run a complete research pipeline: generate an idea, assess it, and create an experimental plan.
+        
+        Args:
+            context (str, optional): Additional context to consider when generating the idea.
+            add_to_conversation (bool, optional): Whether to add the research output to the conversation history.
+                                                 Defaults to True.
+            refine_idea_from_assessment (bool, optional): Whether to use the assessment as feedback to refine 
+                                                         the original idea before creating the plan.
+                                                         Defaults to False.
+            
+        Returns:
+            dict: A dictionary containing the idea, assessment, plan, and refined_idea if applicable
+        """
+        # Wrap the entire pipeline in a single context
+        with self.logging_wrapper.log_pipeline_stage("complete research pipeline"):
+            # Generate initial idea
+            idea = self.generate_research_idea(context=context)
+            
+            # Assess the idea
+            assessment = self.assess_research_idea(idea)
+            
+            # Optionally refine the idea based on the assessment
+            refined_idea = None
+            if refine_idea_from_assessment:
+                # Use the assessment as feedback to refine the idea
+                refined_idea = self.refine_research_idea(idea, assessment)
+                # Create plan based on the refined idea
+                plan = self.create_experimental_plan(refined_idea, assessment)
+            else:
+                # Create plan based on the original idea
+                plan = self.create_experimental_plan(idea, assessment)
+            
+            # Build result dictionary
+            result = {
+                "idea": idea,
+                "assessment": assessment,
+                "plan": plan
+            }
+            
+            # Add refined idea to result if applicable
+            if refined_idea:
+                result["refined_idea"] = refined_idea
+            
+            # Add to conversation history if requested
+            if add_to_conversation and hasattr(self, 'conversation_history'):
+                # Format the research output as a conversation turn
+                if refined_idea:
+                    full_response = f"# Initial Research Idea\n\n{idea}\n\n# Assessment\n\n{assessment}\n\n# Refined Research Idea\n\n{refined_idea}\n\n# Experimental Plan\n\n{plan}"
+                else:
+                    full_response = f"# Research Idea\n\n{idea}\n\n# Assessment\n\n{assessment}\n\n# Experimental Plan\n\n{plan}"
+                
+                from ...dataclass import ConversationTurn
+                
+                # Create a conversation turn from the researcher
+                researcher = self.get_researcher()
+                conversation_turn = ConversationTurn(
+                    role=researcher.role_name,
+                    raw_utterance=full_response,
+                    utterance_type="Further Details",
+                    utterance=full_response
+                )
+                
+                # Add to conversation history
+                self.conversation_history.append(conversation_turn)
+                
+                # Update knowledge base with the new information
+                self.knowledge_base.update_from_conv_turn(
+                    conv_turn=conversation_turn,
+                    allow_create_new_node=True,
+                    insert_under_root=False
+                )
+            
+            return result
 
     def to_dict(self):
         result = {
-            "runner_argument": self.runner_argument.to_dict(),
+            "topic": self.args.topic,
+            "runner_argument": self.args.to_dict(),
             "lm_config": self.lm_config.to_dict(),
             "conversation_history": [turn.to_dict() for turn in self.conversation_history],
             "warmstart_conv_archive": [turn.to_dict() for turn in self.warmstart_conv_archive],
@@ -686,12 +921,11 @@ class CoStormRunner:
 
         # Initialize CoStormRunner
         costorm_runner = cls(
+            args=runner_args,
             lm_config=lm_config,
-            runner_argument=runner_args,
-            logging_wrapper=logging_wrapper,
+            encoder=encoder,
             rm=retriever,
             callback_handler=callback_handler,
-            encoder=encoder,
         )
 
         # Load data from the dictionary
@@ -712,7 +946,7 @@ class CoStormRunner:
             costorm_runner.knowledge_base = KnowledgeBase.from_dict(
                 data=data["knowledge_base"],
                 knowledge_base_lm=costorm_runner.lm_config.knowledge_base_lm,
-                node_expansion_trigger_count=costorm_runner.runner_argument.node_expansion_trigger_count,
+                node_expansion_trigger_count=costorm_runner.args.node_expansion_trigger_count,
                 encoder=costorm_runner.encoder,
             )
 
@@ -732,10 +966,10 @@ class CoStormRunner:
         user to catch up with system's knowledge about the topic.
         """
         with self.logging_wrapper.log_pipeline_stage(pipeline_stage="warm start stage"):
-            if not self.runner_argument.rag_only_baseline_mode:
+            if not self.args.rag_only_baseline_mode:
                 warm_start_module = WarmStartModule(
                     lm_config=self.lm_config,
-                    runner_argument=self.runner_argument,
+                    runner_argument=self.args,
                     logging_wrapper=self.logging_wrapper,
                     rm=self.rm,
                     callback_handler=self.callback_handler,
@@ -746,7 +980,7 @@ class CoStormRunner:
                     warmstart_revised_conv,
                     warmstart_experts,
                 ) = warm_start_module.initiate_warm_start(
-                    topic=self.runner_argument.topic,
+                    topic=self.args.topic,
                     knowledge_base=self.knowledge_base,
                 )
                 self.discourse_manager.experts = (
@@ -761,9 +995,9 @@ class CoStormRunner:
             else:
                 if self.knowledge_base is None:
                     self.knowledge_base = KnowledgeBase(
-                        topic=self.runner_argument.topic,
+                        topic=self.args.topic,
                         knowledge_base_lm=self.lm_config.knowledge_base_lm,
-                        node_expansion_trigger_count=self.runner_argument.node_expansion_trigger_count,
+                        node_expansion_trigger_count=self.args.node_expansion_trigger_count,
                         encoder=self.encoder,
                     )
                 if self.conversation_history is None:
@@ -773,7 +1007,7 @@ class CoStormRunner:
                 self.knowledge_base.update_from_conv_turn(
                     conv_turn=conv_turn,
                     allow_create_new_node=True,
-                    insert_under_root=self.runner_argument.rag_only_baseline_mode,
+                    insert_under_root=self.args.rag_only_baseline_mode,
                 )
 
     def generate_report(self) -> str:
@@ -875,7 +1109,7 @@ class CoStormRunner:
                         self.knowledge_base.update_from_conv_turn(
                             conv_turn=conv_turn,
                             allow_create_new_node=True,
-                            insert_under_root=self.runner_argument.rag_only_baseline_mode,
+                            insert_under_root=self.args.rag_only_baseline_mode,
                         )
                         if self.callback_handler is not None:
                             self.callback_handler.on_mindmap_insert_end()

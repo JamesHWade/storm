@@ -352,3 +352,311 @@ class PureRAGAgent(Agent):
     ):
         with self.logging_wrapper.log_event("PureRAGAgent generate utternace: generate utterance"):
             return self._gen_utterance_from_question(question=conversation_history[-1].utterance)
+
+
+class IdeaGeneration(dspy.Signature):
+    """
+    You are a creative research idea generator tasked with generating novel research ideas based on the conversation topic.
+    Consider the current discussion and knowledge base to propose an innovative idea that pushes the boundaries of current thinking.
+    The idea should be grounded in existing knowledge but explore new directions, combinations, or applications.
+    
+    Generate a research idea that is:
+    1. Novel - introduces new concepts or approaches
+    2. Feasible - could potentially be implemented
+    3. Valuable - addresses important questions or challenges
+    4. Related to the discussion topic
+    
+    Provide:
+    - A clear description of the idea
+    - Why it's novel or innovative
+    - How it relates to the current discussion
+    """
+    
+    topic = dspy.InputField(prefix="Topic of discussion:", format=str)
+    current_knowledge = dspy.InputField(prefix="Current knowledge summary:", format=str)
+    last_utterance = dspy.InputField(prefix="Last utterance in conversation:", format=str)
+    idea = dspy.OutputField(format=str)
+
+
+class IdeaRefinement(dspy.Signature):
+    """
+    You are a research idea refinement specialist. Your task is to improve an existing research idea based on feedback.
+    
+    Consider:
+    1. The original research idea's strengths and core concepts
+    2. The specific feedback provided
+    3. How to address limitations or concerns while preserving the innovative aspects
+    4. Ways to make the idea more feasible, valuable, or novel as suggested by the feedback
+    
+    Provide a refined version of the research idea that:
+    - Maintains the original core concept
+    - Addresses the feedback points
+    - Improves overall quality and potential impact
+    - Is more detailed and well-developed than the original
+    """
+    
+    original_idea = dspy.InputField(prefix="Original research idea:", format=str)
+    feedback = dspy.InputField(prefix="Feedback on the idea:", format=str)
+    topic = dspy.InputField(prefix="Research topic:", format=str)
+    refined_idea = dspy.OutputField(format=str)
+
+
+class IdeaAssessment(dspy.Signature):
+    """
+    Assess the proposed research idea considering its:
+    1. Novelty - how original is this idea?
+    2. Feasibility - how practical would it be to implement?
+    3. Value - what benefits might result if successful?
+    4. Relevance - how well does it relate to the discussion topic?
+    
+    Provide a balanced assessment addressing strengths and limitations.
+    Score each aspect from 1-10 (10 being highest) and provide a brief justification.
+    """
+    
+    idea = dspy.InputField(prefix="Research idea to assess:", format=str)
+    topic = dspy.InputField(prefix="Discussion topic:", format=str)
+    assessment = dspy.OutputField(format=str)
+
+
+class ExperimentalPlan(dspy.Signature):
+    """
+    Create a detailed experimental plan to test or validate the proposed research idea.
+    Consider:
+    1. Methodology - what approach would be most appropriate?
+    2. Required resources - what tools, data, or expertise would be needed?
+    3. Potential challenges - what obstacles might arise and how could they be addressed?
+    4. Timeline - rough estimate of how long implementation might take
+    5. Expected outcomes - what results might validate or refute the idea?
+    
+    The plan should be realistic but ambitious, with clear steps for implementation.
+    """
+    
+    idea = dspy.InputField(prefix="Research idea to test:", format=str)
+    idea_assessment = dspy.InputField(prefix="Assessment of idea:", format=str)
+    plan = dspy.OutputField(format=str)
+
+
+class Researcher(Agent):
+    """
+    The Researcher agent in the Co-STORM framework specializes in generating novel ideas, assessing them for aspects 
+    like novelty, feasibility, and value, and proposing experimental plans to test these ideas.
+    
+    This agent brings creative thinking and scientific rigor to conversations, helping to push the boundaries
+    of current knowledge while providing practical pathways to test new concepts. The Researcher uses language
+    models to generate ideas based on the conversation context, assess their merits, and develop experimental
+    plans grounded in scientific methodology.
+    
+    Args:
+        topic (str): The conversation topic that the researcher focuses on.
+        role_name (str): The specific researcher role (e.g., "Innovation Scientist", "Creative Researcher").
+        role_description (str): A description of the researcher's perspective and approach.
+        lm_config (LMConfigs): Configuration for the language models.
+        runner_argument (RunnerArgument): Co-STORM runner argument.
+        logging_wrapper (LoggingWrapper): An instance of LoggingWrapper to log events.
+        rm (Optional[dspy.Retrieve], optional): A retrieval module for fetching relevant information.
+        callback_handler (BaseCallbackHandler, optional): Handles log message printing.
+    """
+    
+    def __init__(
+        self,
+        topic: str,
+        role_name: str,
+        role_description: str,
+        lm_config: LMConfigs,
+        runner_argument: "RunnerArgument",
+        logging_wrapper: LoggingWrapper,
+        rm: Optional[dspy.Retrieve] = None,
+        callback_handler: BaseCallbackHandler = None,
+    ):
+        super().__init__(topic, role_name, role_description)
+        self.lm_config = lm_config
+        self.runner_argument = runner_argument
+        self.logging_wrapper = logging_wrapper
+        self.callback_handler = callback_handler
+        
+        # Initialize specialized modules for the researcher
+        self.idea_generator = dspy.Predict(IdeaGeneration)
+        self.idea_assessor = dspy.Predict(IdeaAssessment)
+        self.experiment_planner = dspy.Predict(ExperimentalPlan)
+        self.idea_refiner = dspy.Predict(IdeaRefinement)
+        
+        # For grounded responses
+        self.grounded_question_answering_module = _get_answer_question_module_instance(
+            lm_config=self.lm_config,
+            runner_argument=self.runner_argument,
+            logging_wrapper=self.logging_wrapper,
+            rm=rm,
+        )
+    
+    def generate_idea(self, topic: str, knowledge_summary: str, last_utterance: str):
+        """Generate a novel research idea based on the conversation context."""
+        try:
+            with self.logging_wrapper.log_event("Researcher: generate idea"):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    idea = self.idea_generator(
+                        topic=topic,
+                        current_knowledge=knowledge_summary,
+                        last_utterance=last_utterance
+                    ).idea
+        except RuntimeError as e:
+            # Handle case where there's no active pipeline stage
+            if "No pipeline stage is currently active" in str(e):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    idea = self.idea_generator(
+                        topic=topic,
+                        current_knowledge=knowledge_summary,
+                        last_utterance=last_utterance
+                    ).idea
+            else:
+                raise  # Re-raise if it's a different error
+        return idea
+    
+    def assess_idea(self, idea: str, topic: str):
+        """Assess the generated idea for novelty, feasibility, value, and relevance."""
+        try:
+            with self.logging_wrapper.log_event("Researcher: assess idea"):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    assessment = self.idea_assessor(
+                        idea=idea,
+                        topic=topic
+                    ).assessment
+        except RuntimeError as e:
+            # Handle case where there's no active pipeline stage
+            if "No pipeline stage is currently active" in str(e):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    assessment = self.idea_assessor(
+                        idea=idea,
+                        topic=topic
+                    ).assessment
+            else:
+                raise  # Re-raise if it's a different error
+        return assessment
+    
+    def create_experimental_plan(self, idea: str, assessment: str):
+        """Create an experimental plan to test the research idea."""
+        try:
+            with self.logging_wrapper.log_event("Researcher: create experimental plan"):
+                with dspy.settings.context(lm=self.lm_config.utterance_polishing_lm, show_guidelines=False):
+                    plan = self.experiment_planner(
+                        idea=idea,
+                        idea_assessment=assessment
+                    ).plan
+        except RuntimeError as e:
+            # Handle case where there's no active pipeline stage
+            if "No pipeline stage is currently active" in str(e):
+                with dspy.settings.context(lm=self.lm_config.utterance_polishing_lm, show_guidelines=False):
+                    plan = self.experiment_planner(
+                        idea=idea,
+                        idea_assessment=assessment
+                    ).plan
+            else:
+                raise  # Re-raise if it's a different error
+        return plan
+    
+    def refine_idea(self, original_idea: str, feedback: str, topic: str = None):
+        """Refine a research idea based on feedback.
+        
+        Args:
+            original_idea (str): The original research idea to refine
+            feedback (str): Feedback about the idea, including criticisms, suggestions, or questions
+            topic (str, optional): The research topic. Defaults to self.topic if None.
+            
+        Returns:
+            str: A refined version of the research idea that addresses the feedback
+        """
+        if topic is None:
+            topic = self.topic
+            
+        try:
+            with self.logging_wrapper.log_event("Researcher: refine idea"):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    refined_idea = self.idea_refiner(
+                        original_idea=original_idea,
+                        feedback=feedback,
+                        topic=topic
+                    ).refined_idea
+        except RuntimeError as e:
+            # Handle case where there's no active pipeline stage
+            if "No pipeline stage is currently active" in str(e):
+                with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
+                    refined_idea = self.idea_refiner(
+                        original_idea=original_idea,
+                        feedback=feedback,
+                        topic=topic
+                    ).refined_idea
+            else:
+                raise  # Re-raise if it's a different error
+        return refined_idea
+    
+    def generate_utterance(
+        self,
+        knowledge_base: KnowledgeBase,
+        conversation_history: List[ConversationTurn],
+    ):
+        with self.logging_wrapper.log_event("Researcher generate utterance: processing context"):
+            conversation_summary = knowledge_base.get_knowledge_base_summary()
+            last_conv_turn = conversation_history[-1]
+            last_utterance = last_conv_turn.utterance
+            
+            # Determine appropriate response type based on conversation flow
+            if last_conv_turn.utterance_type in ["Original Question", "Information Request"]:
+                # If someone asked a direct question, provide a grounded answer
+                with self.logging_wrapper.log_event("Researcher: answering direct question"):
+                    grounded_answer = self.grounded_question_answering_module(
+                        topic=self.topic,
+                        question=last_utterance,
+                        mode="brief",
+                        style="conversational and detailed",
+                    )
+                    
+                    conversation_turn = ConversationTurn(
+                        role=self.role_name, 
+                        raw_utterance="", 
+                        utterance_type="Potential Answer"
+                    )
+                    conversation_turn.claim_to_make = last_utterance
+                    conversation_turn.raw_utterance = grounded_answer.response
+                    conversation_turn.utterance = grounded_answer.response
+                    conversation_turn.queries = grounded_answer.queries
+                    conversation_turn.raw_retrieved_info = grounded_answer.raw_retrieved_info
+                    conversation_turn.cited_info = grounded_answer.cited_info
+                    
+                    return conversation_turn
+            else:
+                # Generate a novel idea and assessment
+                with self.logging_wrapper.log_event("Researcher: generating novel content"):
+                    # Generate idea
+                    idea = self.generate_idea(
+                        topic=self.topic,
+                        knowledge_summary=conversation_summary,
+                        last_utterance=last_utterance
+                    )
+                    
+                    # Assess the idea
+                    assessment = self.assess_idea(
+                        idea=idea,
+                        topic=self.topic
+                    )
+                    
+                    # Create an experimental plan if appropriate
+                    # Only create a plan sometimes to avoid too much detail in every response
+                    include_plan = np.random.random() > 0.5
+                    
+                    if include_plan:
+                        plan = self.create_experimental_plan(
+                            idea=idea,
+                            assessment=assessment
+                        )
+                        full_response = f"{idea}\n\n{assessment}\n\n{plan}"
+                    else:
+                        full_response = f"{idea}\n\n{assessment}"
+                    
+                    # Create conversation turn
+                    conversation_turn = ConversationTurn(
+                        role=self.role_name,
+                        raw_utterance=full_response,
+                        utterance_type="Further Details",
+                        utterance=full_response
+                    )
+                    
+                    return conversation_turn
