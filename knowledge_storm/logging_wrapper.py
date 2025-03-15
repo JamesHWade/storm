@@ -152,21 +152,28 @@ class LoggingWrapper:
 
     @contextmanager
     def log_pipeline_stage(self, pipeline_stage):
-        if self.pipeline_stage_active:
-            print("A pipeline stage is already active, ending the current stage safely.")
-            self._pipeline_stage_end()
-
+        was_active = self.pipeline_stage_active
+        previous_stage = self.current_pipeline_stage
+        
         start_time = time.time()
         try:
-            self._pipeline_stage_start(pipeline_stage)
+            # Only start a new pipeline stage if one isn't already active
+            if not was_active:
+                self._pipeline_stage_start(pipeline_stage)
             yield
         except Exception as e:
             print(f"Error occurred during pipeline stage '{pipeline_stage}': {e}")
+            raise  # Re-raise the exception after logging it
         finally:
-            self.logging_dict[self.current_pipeline_stage]["total_wall_time"] = (
-                time.time() - start_time
-            )
-            self._pipeline_stage_end()
+            # Only end the pipeline stage if we started it
+            if not was_active:
+                try:
+                    self.logging_dict[self.current_pipeline_stage]["total_wall_time"] = (
+                        time.time() - start_time
+                    )
+                    self._pipeline_stage_end()
+                except Exception as e:
+                    print(f"Error ending pipeline stage '{pipeline_stage}': {e}")
 
     def dump_logging_and_reset(self, reset_logging=True):
         log_dump = {}

@@ -704,16 +704,33 @@ class CoStormRunner:
             # Get the knowledge base summary
             knowledge_summary = self.knowledge_base.get_knowledge_base_summary()
             
+            # Create a formatted version of recent conversation history
+            conversation_context = ""
+            if hasattr(self, 'conversation_history') and self.conversation_history:
+                # Limit to last 5 turns to keep context manageable
+                recent_turns = self.conversation_history[-5:]
+                conversation_context = "Recent Conversation:\n"
+                for i, turn in enumerate(recent_turns):
+                    conversation_context += f"{turn.role}: {turn.utterance}\n\n"
+            
+            # Add report if available
+            report_context = ""
+            if hasattr(self, 'report') and self.report:
+                report_context = "Current Research Report:\n" + self.report[:2000] + "...\n\n"
+            
             # Use the provided context or the last utterance from conversation history
             last_utterance = context
             if last_utterance is None and hasattr(self, 'conversation_history') and self.conversation_history:
                 last_utterance = self.conversation_history[-1].utterance
             
+            # Combine all context information
+            full_context = f"{conversation_context}\n{report_context}\nImmediate Context: {last_utterance or ''}"
+            
             # Generate the idea
             return researcher.generate_idea(
                 topic=self.args.topic,
                 knowledge_summary=knowledge_summary,
-                last_utterance=last_utterance or ""
+                last_utterance=full_context
             )
     
     def assess_research_idea(self, idea):
@@ -758,13 +775,14 @@ class CoStormRunner:
                 assessment=assessment
             )
     
-    def refine_research_idea(self, original_idea, feedback):
+    def refine_research_idea(self, original_idea, feedback, previous_plan=None):
         """
         Refine a research idea based on specific feedback.
         
         Args:
             original_idea (str): The original research idea to refine
             feedback (str): Feedback containing critiques, suggestions, or questions about the idea
+            previous_plan (str, optional): Previous experimental plan if available
             
         Returns:
             str: A refined version of the research idea that addresses the feedback
@@ -772,15 +790,44 @@ class CoStormRunner:
         # Wrap in pipeline stage context
         with self.logging_wrapper.log_pipeline_stage("research idea refinement"):
             researcher = self.get_researcher()
+            
+            # Create a formatted version of recent conversation history for additional context
+            conversation_context = ""
+            if hasattr(self, 'conversation_history') and self.conversation_history:
+                # Limit to last 5 turns to keep context manageable
+                recent_turns = self.conversation_history[-5:]
+                conversation_context = "Recent Conversation Context:\n"
+                for i, turn in enumerate(recent_turns):
+                    conversation_context += f"{turn.role}: {turn.utterance}\n\n"
+            
+            # Add report if available for additional research context
+            report_context = ""
+            if hasattr(self, 'report') and self.report:
+                report_context = "Current Research Report Context:\n" + self.report[:2000] + "...\n\n"
+            
+            # Add previous experimental plan if available
+            plan_context = ""
+            if previous_plan:
+                plan_context = "Previous Experimental Plan:\n" + previous_plan + "\n\n"
+                
+            # Format original idea for reference (even though it's passed as a parameter)
+            idea_context = "Original Research Idea:\n" + original_idea + "\n\n"
+            
+            # Enhance feedback with additional context
+            enhanced_feedback = f"{feedback}\n\n{idea_context}{conversation_context}\n{report_context}\n{plan_context}"
+            
             return researcher.refine_idea(
                 original_idea=original_idea,
-                feedback=feedback,
+                feedback=enhanced_feedback,
                 topic=self.args.topic
             )
     
     def research_pipeline(self, context=None, add_to_conversation=True, refine_idea_from_assessment=False):
         """
         Run a complete research pipeline: generate an idea, assess it, and create an experimental plan.
+        
+        The pipeline leverages conversation history and previous research (if available) to provide
+        context for idea generation and refinement, making the research process more cohesive and informed.
         
         Args:
             context (str, optional): Additional context to consider when generating the idea.
@@ -804,9 +851,17 @@ class CoStormRunner:
             # Optionally refine the idea based on the assessment
             refined_idea = None
             if refine_idea_from_assessment:
-                # Use the assessment as feedback to refine the idea
-                refined_idea = self.refine_research_idea(idea, assessment)
-                # Create plan based on the refined idea
+                # Generate a preliminary plan based on the original idea to provide context for refinement
+                preliminary_plan = self.create_experimental_plan(idea, assessment)
+                
+                # Use the assessment as feedback to refine the idea, with the preliminary plan as context
+                refined_idea = self.refine_research_idea(
+                    original_idea=idea, 
+                    feedback=f"Assessment of Original Idea:\n{assessment}", 
+                    previous_plan=preliminary_plan
+                )
+                
+                # Create the final plan based on the refined idea
                 plan = self.create_experimental_plan(refined_idea, assessment)
             else:
                 # Create plan based on the original idea
@@ -822,6 +877,8 @@ class CoStormRunner:
             # Add refined idea to result if applicable
             if refined_idea:
                 result["refined_idea"] = refined_idea
+                # Also include the preliminary plan in the result for reference
+                result["preliminary_plan"] = preliminary_plan
             
             # Add to conversation history if requested
             if add_to_conversation and hasattr(self, 'conversation_history'):
@@ -831,7 +888,8 @@ class CoStormRunner:
                 else:
                     full_response = f"# Research Idea\n\n{idea}\n\n# Assessment\n\n{assessment}\n\n# Experimental Plan\n\n{plan}"
                 
-                from ...dataclass import ConversationTurn
+                # Fix the import - use absolute import instead of relative import
+                from knowledge_storm.dataclass import ConversationTurn
                 
                 # Create a conversation turn from the researcher
                 researcher = self.get_researcher()
