@@ -3,7 +3,9 @@ Example demonstrating the Researcher agent in the Co-STORM framework.
 
 This example shows how to:
 1. Initialize a Co-STORM runner with a Researcher agent
-2. Generate research ideas
+2. Generate research ideas using the enhanced multi-stage approach:
+   - Generate multiple brief ideas (returned as a proper list type)
+   - Select and develop the most promising idea using rich context
 3. Assess research ideas
 4. Create experimental plans
 5. Refine ideas based on feedback
@@ -56,79 +58,118 @@ def main():
     runner.warm_start()
     print("Warm start completed")
     
-    # Example 1: Generate a research idea
-    print("\n=== EXAMPLE 1: GENERATING A RESEARCH IDEA ===\n")
-    idea = runner.generate_research_idea(
-        context="Consider how combining traditional agricultural knowledge with modern technology could improve resilience"
-    )
-    print(idea)
+    # Interactive notebook-style session
+    print("\n"+"="*80)
+    print("EXAMPLE 1: ENHANCED MULTI-STAGE RESEARCH IDEA GENERATION")
+    print("="*80)
+    print("Generating multiple research idea candidates (as a list) and selecting the best one...")
+    print("This process now leverages much more conversation context for improved relevance.")
     
-    # Example 2: Assess the idea
-    print("\n=== EXAMPLE 2: ASSESSING THE RESEARCH IDEA ===\n")
-    assessment = runner.assess_research_idea(idea)
-    print(assessment)
+    # Generate research ideas using the new multi-stage approach
+    research_idea = runner.generate_research_idea()
     
-    # Example 3: Gather feedback and refine the idea
-    print("\n=== EXAMPLE 3: REFINING THE IDEA BASED ON FEEDBACK ===\n")
-    feedback = """
-    The idea has potential but needs more specific implementation details. 
-    Consider how it could be applied in developing countries with limited resources.
-    Also, address potential scaling challenges and how to measure success metrics.
-    """
-    refined_idea = runner.refine_research_idea(idea, feedback)
-    print("ORIGINAL IDEA:")
-    print(idea)
-    print("\nFEEDBACK:")
-    print(feedback)
-    print("\nREFINED IDEA:")
-    print(refined_idea)
+    print("\nRESEARCH IDEAS OUTPUT:")
+    print("-"*50)
+    print(research_idea)
+    print("-"*50)
+    print("\nThe output above contains:")
+    print("1. A list of brief research idea candidates (5-10 one-sentence ideas)")
+    print("2. The selected idea number and rationale for selection")
+    print("3. The fully developed research idea")
+    print("\nBehind the scenes, the IdeaCreation module now returns a proper list type")
+    print("rather than a string, allowing for better handling of the candidates.")
     
-    # Example 4: Create an experimental plan for the refined idea
-    print("\n=== EXAMPLE 4: CREATING AN EXPERIMENTAL PLAN ===\n")
-    # Generate a new assessment for the refined idea
-    refined_assessment = runner.assess_research_idea(refined_idea)
-    plan = runner.create_experimental_plan(refined_idea, refined_assessment)
-    print(plan)
+    # The rest of the example
+    print("\n"+"="*80)
+    print("EXAMPLE 2: ASSESS THE RESEARCH IDEA")
+    print("="*80)
     
-    # Example 5: Run complete research pipeline and add to conversation
-    print("\n=== EXAMPLE 5: COMPLETE RESEARCH PIPELINE WITH CONVERSATION INTEGRATION ===\n")
-    print("Before research pipeline, conversation history has", len(runner.conversation_history), "turns")
+    # Extract the developed idea for assessment
+    idea_parts = research_idea.split("## Developed Research Idea:")
+    if len(idea_parts) > 1:
+        developed_idea = idea_parts[1].strip()
+        print("\nAssessing the developed research idea...")
+        assessment = runner.assess_research_idea(developed_idea)
+    else:
+        print("\nAssessing the complete research idea...")
+        assessment = runner.assess_research_idea(research_idea)
     
-    research_output = runner.research_pipeline(
-        context="Novel approaches to water conservation in drought-prone regions",
-        add_to_conversation=True
-    )
-    
-    print("After research pipeline, conversation history has", len(runner.conversation_history), "turns")
-    
-    # Example 6: Run research pipeline with automatic idea refinement
-    print("\n=== EXAMPLE 6: RESEARCH PIPELINE WITH AUTOMATIC IDEA REFINEMENT ===\n")
-    
-    refined_research_output = runner.research_pipeline(
-        context="Sustainable energy solutions for rural communities",
-        add_to_conversation=True,
-        refine_idea_from_assessment=True  # This will refine the idea based on the assessment
-    )
-    
-    print("INITIAL IDEA:")
-    print(refined_research_output["idea"])
     print("\nASSESSMENT:")
-    print(refined_research_output["assessment"])
-    print("\nREFINED IDEA:")
-    print(refined_research_output["refined_idea"])
+    print("-"*50)
+    print(assessment)
+    print("-"*50)
+    
+    print("\n"+"="*80)
+    print("EXAMPLE 3: CREATE AN EXPERIMENTAL PLAN")
+    print("="*80)
+    
+    print("\nCreating an experimental plan for the research idea...")
+    plan = runner.create_experimental_plan(developed_idea, assessment)
+    
     print("\nEXPERIMENTAL PLAN:")
-    print(refined_research_output["plan"])
+    print("-"*50)
+    print(plan)
+    print("-"*50)
     
-    # Add a follow-up question to the conversation
-    print("\n=== EXAMPLE 7: INTERACTIVE CONVERSATION WITH RESEARCHER ===\n")
-    runner.step(user_utterance="What are the biggest challenges in implementing the water conservation techniques you proposed?")
+    print("\n"+"="*80)
+    print("EXAMPLE 4: REFINE AN IDEA BASED ON FEEDBACK")
+    print("="*80)
     
-    # Let the system respond (might be the researcher or another expert)
-    response = runner.step()
-    print(f"Response from {response.role}:")
-    print(response.utterance)
+    print("\nRefining the research idea based on critical feedback...")
+    feedback = """
+    The idea has potential but needs to consider economic constraints for small-scale farmers.
+    Additionally, more consideration should be given to implementation in regions with limited
+    technological infrastructure. Consider adding elements of traditional farming knowledge.
+    """
     
-    print("\nResearch investigation complete!")
+    refined_idea = runner.refine_research_idea(developed_idea, feedback)
+    
+    print("\nREFINED IDEA:")
+    print("-"*50)
+    print(refined_idea)
+    print("-"*50)
+    
+    print("\n"+"="*80)
+    print("EXAMPLE 5: COMPLETE RESEARCH PIPELINE WITH RICH CONTEXT")
+    print("="*80)
+    
+    print("\nRunning the complete research pipeline with default settings (no refinement)...")
+    print("This process now uses comprehensive conversation context rather than just the last utterance.")
+    result = runner.research_pipeline(context="Investigate water conservation methods for drought conditions", add_to_conversation=True)
+    
+    print("\nRESEARCH PIPELINE RESULT COMPONENTS:")
+    print("-"*50)
+    print("1. Idea candidates (properly stored as a list internally)")
+    print("2. Selected and developed idea")
+    print("3. Assessment")
+    print("4. Experimental plan")
+    print("-"*50)
+    
+    print("\n"+"="*80)
+    print("EXAMPLE 6: RESEARCH PIPELINE WITH AUTOMATIC IDEA REFINEMENT")
+    print("="*80)
+    
+    print("\nRunning research pipeline with automatic idea refinement based on assessment...")
+    result_with_refinement = runner.research_pipeline(
+        context="Explore soil microbiome enhancement techniques",
+        add_to_conversation=True,
+        refine_idea_from_assessment=True
+    )
+    
+    print("\nRESEARCH PIPELINE RESULT WITH REFINEMENT COMPONENTS:")
+    print("-"*50)
+    print("1. Original idea candidates and selection")
+    print("2. Assessment")
+    print("3. Refined idea (improved based on assessment)")
+    print("4. Final experimental plan (based on refined idea)")
+    print("-"*50)
+    
+    print("\n"+"="*80)
+    print("CONVERSATION HISTORY")
+    print("="*80)
+    print(f"\nThe research results have been added to the conversation history.")
+    print(f"Conversation now has {len(runner.conversation_history)} turns.")
+    print("The system leverages this rich conversation history when generating new ideas.")
 
 if __name__ == "__main__":
     main() 

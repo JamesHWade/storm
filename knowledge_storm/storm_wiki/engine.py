@@ -71,10 +71,10 @@ class STORMWikiLMConfigs(LMConfigs):
                 model="gpt-4-0125-preview", max_tokens=400, **openai_kwargs
             )
             self.article_gen_lm = dspy.LM(
-                model="gpt-4o-2024-05-13", max_tokens=700, **openai_kwargs
+                model="gpt-4o-2024-11-20", max_tokens=700, **openai_kwargs
             )
             self.article_polish_lm = dspy.LM(
-                model="gpt-4o-2024-05-13", max_tokens=4000, **openai_kwargs
+                model="gpt-4o-2024-11-20", max_tokens=4000, **openai_kwargs
             )
         elif openai_type and openai_type == "azure":
             self.conv_simulator_lm = dspy.LM(

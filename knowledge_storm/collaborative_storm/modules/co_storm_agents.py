@@ -353,29 +353,58 @@ class PureRAGAgent(Agent):
         with self.logging_wrapper.log_event("PureRAGAgent generate utternace: generate utterance"):
             return self._gen_utterance_from_question(question=conversation_history[-1].utterance)
 
-
-class IdeaGeneration(dspy.Signature):
+class IdeaCreation(dspy.Signature):
     """
-    You are a creative research idea generator tasked with generating novel research ideas based on the conversation topic.
-    Consider the current discussion and knowledge base to propose an innovative idea that pushes the boundaries of current thinking.
-    The idea should be grounded in existing knowledge but explore new directions, combinations, or applications.
+    You are a creative research idea generator tasked with producing a diverse set of potential research ideas.
     
-    Generate a research idea that is:
-    1. Novel - introduces new concepts or approaches
-    2. Feasible - could potentially be implemented
-    3. Valuable - addresses important questions or challenges
-    4. Related to the discussion topic
+    Consider the topic, current knowledge, and conversation context to generate a variety of potential research directions.
+    Each idea should be expressed as a single sentence that captures its core essence.
     
-    Provide:
-    - A clear description of the idea
-    - Why it's novel or innovative
-    - How it relates to the current discussion
+    Your ideas should:
+    1. Be diverse - explore different approaches, methodologies, and perspectives
+    2. Be novel - introduce new concepts or approaches
+    3. Be feasible - have potential for implementation
+    4. Be valuable - address important questions or challenges
+    5. Be relevant - connect to the discussion topic
+    
+    Create distinct ideas, with each representing a different approach or angle.
+    Number each idea and keep each to a single sentence that captures the core concept.
     """
     
     topic = dspy.InputField(prefix="Topic of discussion:", format=str)
     current_knowledge = dspy.InputField(prefix="Current knowledge summary:", format=str)
-    last_utterance = dspy.InputField(prefix="Last utterance in conversation:", format=str)
-    idea = dspy.OutputField(format=str)
+    conversation_context = dspy.InputField(prefix="Recent conversation context:", format=str)
+    idea_list = dspy.OutputField(prefix="List of brief research ideas:", format=list)
+
+
+class IdeaCuration(dspy.Signature):
+    """
+    You are a research idea curator tasked with selecting and developing the most promising research idea from a list.
+    
+    Evaluate each of the provided ideas based on:
+    1. Novelty - how original and innovative is the idea?
+    2. Feasibility - how practical is it to implement?
+    3. Value - what impact could this idea have?
+    4. Relevance - how well does it address the topic and context?
+    
+    First, analyze each idea briefly, noting its strengths and weaknesses.
+    Then, select the most promising idea and develop it into a comprehensive research concept that includes:
+    - A thorough description of the concept and approach
+    - The specific innovation or novelty that distinguishes this idea
+    - The potential value and impact of pursuing this research
+    - How it builds upon or challenges existing knowledge
+    - Why this idea is particularly relevant to the broader topic
+    
+    Clearly indicate which idea number you've selected and why, then develop it fully.
+    """
+    
+    topic = dspy.InputField(prefix="Topic of discussion:", format=str)
+    idea_list = dspy.InputField(prefix="List of brief research ideas:", format=list)
+    current_knowledge = dspy.InputField(prefix="Current knowledge summary:", format=str)
+    conversation_context = dspy.InputField(prefix="Recent conversation context:", format=str)
+    selected_idea_number = dspy.OutputField(prefix="Selected idea number:", format=str)
+    selection_reasoning = dspy.OutputField(prefix="Reasoning for selection:", format=str)
+    developed_idea = dspy.OutputField(prefix="Fully developed research idea:", format=str)
 
 
 class IdeaRefinement(dspy.Signature):
@@ -475,7 +504,8 @@ class Researcher(Agent):
         self.callback_handler = callback_handler
         
         # Initialize specialized modules for the researcher
-        self.idea_generator = dspy.Predict(IdeaGeneration)
+        self.idea_creator = dspy.Predict(IdeaCreation)
+        self.idea_curator = dspy.Predict(IdeaCuration)
         self.idea_assessor = dspy.Predict(IdeaAssessment)
         self.experiment_planner = dspy.Predict(ExperimentalPlan)
         self.idea_refiner = dspy.Predict(IdeaRefinement)
@@ -488,28 +518,133 @@ class Researcher(Agent):
             rm=rm,
         )
     
-    def generate_idea(self, topic: str, knowledge_summary: str, last_utterance: str):
-        """Generate a novel research idea based on the conversation context."""
+    def generate_idea(self, topic: str, knowledge_summary: str, conversation_context: str):
+        """
+        Generate a novel research idea using a two-stage process of creation and curation.
+        
+        This method first generates multiple brief idea candidates, then selects and develops
+        the most promising one. The process leverages comprehensive conversation context 
+        and knowledge to ensure ideas are relevant and well-grounded.
+        
+        Args:
+            topic (str): The research topic to focus on
+            knowledge_summary (str): A summary of relevant knowledge on the topic
+            conversation_context (str): Detailed context from recent conversation history
+            
+        Returns:
+            str: A formatted output containing idea candidates, selection reasoning, and the developed idea
+        """
         try:
-            with self.logging_wrapper.log_event("Researcher: generate idea"):
+            with self.logging_wrapper.log_event("Researcher: generate multiple idea candidates"):
                 with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
-                    idea = self.idea_generator(
+                    # Stage 1: Generate multiple brief ideas
+                    idea_creation_result = self.idea_creator(
                         topic=topic,
                         current_knowledge=knowledge_summary,
-                        last_utterance=last_utterance
-                    ).idea
+                        conversation_context=conversation_context
+                    )
+                    
+                    # Ensure idea_list is properly handled as a list of distinct ideas
+                    # If it's a string, split it into lines and clean it up
+                    idea_list = idea_creation_result.idea_list
+                    if isinstance(idea_list, str):
+                        # Split by newlines and filter out empty lines
+                        idea_list = [line.strip() for line in idea_list.split('\n') if line.strip()]
+                        # If we still don't have proper ideas, try to extract numbered ideas
+                        if len(idea_list) <= 1:
+                            # Try to extract numbered items (e.g., "1. First idea")
+                            import re
+                            matches = re.findall(r'\d+\.\s*(.*?)(?=\d+\.|$)', idea_list[0], re.DOTALL)
+                            if matches:
+                                idea_list = [match.strip() for match in matches if match.strip()]
+                    
+                    # Ensure we have at least one idea
+                    if not idea_list or (len(idea_list) == 1 and not idea_list[0]):
+                        idea_list = [f"A novel approach to {topic} that builds on existing research"]
+                    
+                    # Remove any existing numbering from the ideas (e.g., "1. ", "2. ")
+                    import re
+                    cleaned_idea_list = []
+                    for idea in idea_list:
+                        # Remove numbering patterns like "1.", "1)", "#1" at the beginning of the idea
+                        cleaned_idea = re.sub(r'^(\d+\.|\d+\)|\#\d+|\d+)\s*', '', idea).strip()
+                        cleaned_idea_list.append(cleaned_idea)
+                    
+                    # Format idea list for display
+                    formatted_idea_list = "\n".join([f"{i+1}. {idea}" for i, idea in enumerate(cleaned_idea_list)])
+                    
+                    # Stage 2: Select and develop the best idea
+                    idea_curation_result = self.idea_curator(
+                        topic=topic,
+                        idea_list=cleaned_idea_list,  # Use the cleaned list for curation
+                        current_knowledge=knowledge_summary,
+                        conversation_context=conversation_context
+                    )
+                    
+                    # Get the selected idea index, ensuring it's valid
+                    try:
+                        selected_idx = int(idea_curation_result.selected_idea_number) - 1
+                        if selected_idx < 0 or selected_idx >= len(cleaned_idea_list):
+                            selected_idx = 0
+                    except (ValueError, TypeError):
+                        selected_idx = 0
+                    
+                    # Format the final output to include both the candidates and selected idea
+                    final_idea = f"""# Research Idea Candidates
+{formatted_idea_list}
+
+# Selected Idea: {cleaned_idea_list[selected_idx]}
+## Selection Rationale:
+{idea_curation_result.selection_reasoning}
+
+## Developed Research Idea:
+{idea_curation_result.developed_idea}
+"""
         except RuntimeError as e:
             # Handle case where there's no active pipeline stage
             if "No pipeline stage is currently active" in str(e):
                 with dspy.settings.context(lm=self.lm_config.discourse_manage_lm, show_guidelines=False):
-                    idea = self.idea_generator(
-                        topic=topic,
-                        current_knowledge=knowledge_summary,
-                        last_utterance=last_utterance
-                    ).idea
+                    # Create a simple fallback that still generates multiple ideas
+                    # but in a more streamlined way
+                    try:
+                        idea_creation = self.idea_creator(
+                            topic=topic,
+                            current_knowledge=knowledge_summary,
+                            conversation_context=conversation_context
+                        )
+                        fallback_ideas = idea_creation.idea_list
+                        
+                        # Process fallback ideas the same way
+                        if isinstance(fallback_ideas, str):
+                            # Split by newlines and filter out empty lines
+                            fallback_ideas = [line.strip() for line in fallback_ideas.split('\n') if line.strip()]
+                            # Check if we need to extract numbered ideas
+                            if len(fallback_ideas) <= 1 and fallback_ideas:
+                                import re
+                                matches = re.findall(r'\d+\.\s*(.*?)(?=\d+\.|$)', fallback_ideas[0], re.DOTALL)
+                                if matches:
+                                    fallback_ideas = [match.strip() for match in matches if match.strip()]
+                        
+                        # Remove any existing numbering from the fallback ideas
+                        cleaned_fallback_ideas = []
+                        for idea in fallback_ideas:
+                            # Remove numbering patterns
+                            cleaned_idea = re.sub(r'^(\d+\.|\d+\)|\#\d+|\d+)\s*', '', idea).strip()
+                            cleaned_fallback_ideas.append(cleaned_idea)
+                        
+                        # Ensure we have at least one idea
+                        if cleaned_fallback_ideas and len(cleaned_fallback_ideas) > 0:
+                            first_idea = cleaned_fallback_ideas[0]
+                            final_idea = f"# Research Idea\n{first_idea}\n\nUnable to perform full curation process."
+                        else:
+                            # Ultimate fallback
+                            final_idea = f"# Research Idea\nA novel approach to {topic} that builds on existing research."
+                    except:
+                        # Ultimate fallback if everything fails
+                        final_idea = f"# Research Idea\nA novel approach to {topic} that builds on existing research."
             else:
                 raise  # Re-raise if it's a different error
-        return idea
+        return final_idea
     
     def assess_idea(self, idea: str, topic: str):
         """Assess the generated idea for novelty, feasibility, value, and relevance."""
@@ -625,16 +760,55 @@ class Researcher(Agent):
             else:
                 # Generate a novel idea and assessment
                 with self.logging_wrapper.log_event("Researcher: generating novel content"):
-                    # Generate idea
-                    idea = self.generate_idea(
+                    # Prepare rich conversation context
+                    conversation_context = ""
+                    if conversation_history:
+                        # Include up to 10 recent turns for rich context
+                        recent_turns = conversation_history[-10:]
+                        conversation_context = "Recent Conversation Context:\n"
+                        for i, turn in enumerate(recent_turns):
+                            role = turn.role
+                            utterance = turn.utterance
+                            utterance_type = turn.utterance_type if hasattr(turn, 'utterance_type') else "Message"
+                            conversation_context += f"Turn {len(conversation_history) - len(recent_turns) + i + 1} - {role} ({utterance_type}):\n{utterance}\n\n"
+                    
+                    # Add immediate context
+                    last_turn_context = f"Most Recent Message: {last_conv_turn.role} - {last_utterance}"
+                    full_context = f"{conversation_context}\n{last_turn_context}"
+                    
+                    # Generate idea with rich context
+                    idea_output = self.generate_idea(
                         topic=self.topic,
                         knowledge_summary=conversation_summary,
-                        last_utterance=last_utterance
+                        conversation_context=full_context
                     )
+                    
+                    # The idea_output now contains multiple sections with candidates, selection, and developed idea
+                    # For the conversation, we'll focus primarily on the developed idea
+                    # but can reference the selection process as well
+                    
+                    # Extract the developed idea from the output - it's in the final section
+                    idea_parts = idea_output.split("## Developed Research Idea:")
+                    if len(idea_parts) > 1:
+                        developed_idea = idea_parts[1].strip()
+                        selection_parts = idea_output.split("## Selection Rationale:")
+                        selection_rationale = ""
+                        if len(selection_parts) > 1:
+                            selection_rationale = selection_parts[1].split("## Developed Research Idea:")[0].strip()
+                        
+                        # Structure the idea for presentation in conversation
+                        idea_for_assessment = f"# Research Idea\n{developed_idea}"
+                        
+                        # Include a condensed version of the selection rationale if available
+                        if selection_rationale:
+                            idea_for_assessment = f"# Selection Rationale\n{selection_rationale}\n\n{idea_for_assessment}"
+                    else:
+                        # Fallback if parsing fails
+                        idea_for_assessment = idea_output
                     
                     # Assess the idea
                     assessment = self.assess_idea(
-                        idea=idea,
+                        idea=idea_for_assessment,
                         topic=self.topic
                     )
                     
@@ -644,12 +818,12 @@ class Researcher(Agent):
                     
                     if include_plan:
                         plan = self.create_experimental_plan(
-                            idea=idea,
+                            idea=idea_for_assessment,
                             assessment=assessment
                         )
-                        full_response = f"{idea}\n\n{assessment}\n\n{plan}"
+                        full_response = f"{idea_output}\n\n{assessment}\n\n{plan}"
                     else:
-                        full_response = f"{idea}\n\n{assessment}"
+                        full_response = f"{idea_output}\n\n{assessment}"
                     
                     # Create conversation turn
                     conversation_turn = ConversationTurn(

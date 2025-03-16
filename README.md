@@ -215,7 +215,12 @@ article = costorm_runner.generate_report()
 print(article)
 ```
 
-
+> **Note on Logging**: By default, the framework uses a WARNING log level to minimize verbosity. 
+> If you need more detailed logs for debugging, you can set a lower log level:
+> ```python
+> import logging
+> logging.basicConfig(level=logging.INFO)  # or logging.DEBUG for even more verbose output
+> ```
 
 ## Quick Start with Example Scripts
 
@@ -299,7 +304,7 @@ The FreshWiki Dataset is a collection of 100 high-quality Wikipedia articles foc
 You can download the dataset from [huggingface](https://huggingface.co/datasets/EchoShao8899/FreshWiki) directly. To ease the data contamination issue, we archive the [source code](https://github.com/stanford-oval/storm/tree/NAACL-2024-code-backup/FreshWiki) for the data construction pipeline that can be repeated at future dates.
 
 ### WildSeek
-To study users’ interests in complex information seeking tasks in the wild, we utilized data collected from the web research preview to create the WildSeek dataset. We downsampled the data to ensure the diversity of the topics and the quality of the data. Each data point is a pair comprising a topic and the user’s goal for conducting deep search on the topic.  For more details, please refer to Section 2.2 and Appendix A of [Co-STORM paper](https://www.arxiv.org/abs/2408.15232).
+To study users' interests in complex information seeking tasks in the wild, we utilized data collected from the web research preview to create the WildSeek dataset. We downsampled the data to ensure the diversity of the topics and the quality of the data. Each data point is a pair comprising a topic and the user's goal for conducting deep search on the topic.  For more details, please refer to Section 2.2 and Appendix A of [Co-STORM paper](https://www.arxiv.org/abs/2408.15232).
 
 The WildSeek dataset is available [here](https://huggingface.co/datasets/YuchengJiang/WildSeek).
 
