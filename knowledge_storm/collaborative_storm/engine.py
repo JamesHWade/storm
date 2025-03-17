@@ -214,15 +214,7 @@ class CollaborativeStormLMConfigs(LMConfigs):
         """
         Constructs a CollaborativeStormLMConfigs instance from a dictionary representation.
         Restores sensitive information from environment variables instead of expecting it in the data.
-
-        Args:
-            data (dict): The dictionary representation without sensitive information
-
-        Returns:
-            CollaborativeStormLMConfigs: A fully configured instance with authentication restored
-
-        Raises:
-            ValueError: If no data is provided
+        Properly handles both direct API key and header-based authentication.
         """
         # If there's no data, raise an exception
         if not data:
@@ -252,57 +244,84 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 # Extract parameters from model_info
                 model = model_info.get("model")
                 kwargs = model_info.get("kwargs", {}).copy()
+                max_tokens = model_info.get("max_tokens")
+                temperature = model_info.get("temperature")
+                top_p = model_info.get("top_p")
 
-                # Handle authentication based on environment variables, not from serialized data
-                used_authentication = model_info.get("used_authentication", False)
-                if used_authentication:
-                    # Check if this is an Azure model
-                    if model and "azure" in str(model).lower():
-                        # Try to get Azure API key first
-                        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv(
-                            "AZURE_API_KEY"
+                # Add temperature and top_p to kwargs if present
+                if temperature is not None:
+                    kwargs["temperature"] = temperature
+                if top_p is not None:
+                    kwargs["top_p"] = top_p
+
+                # Prioritize restoring authentication - first determine if this is Azure
+                is_azure = False
+                if model and "azure" in str(model).lower():
+                    is_azure = True
+                elif (
+                    "api_base" in kwargs
+                    and kwargs["api_base"]
+                    and "azure" in str(kwargs["api_base"]).lower()
+                ):
+                    is_azure = True
+
+                # Check if we should use header-based auth (for DOW environment)
+                client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv(
+                    "AZURE_CLIENT_ID"
+                )
+                client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
+                    "AZURE_CLIENT_SECRET"
+                )
+                tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv(
+                    "AZURE_TENANT_ID"
+                )
+
+                # Determine authentication method based on environment variables
+                # Prioritize header-based auth if client credentials are available
+                if is_azure and all([client_id, client_secret, tenant_id]):
+                    # Use header-based authentication
+                    auth_headers = get_auth_headers()
+                    if auth_headers:
+                        kwargs["extra_headers"] = auth_headers
+                        kwargs["api_key"] = (
+                            None  # Set explicitly to None for header auth
                         )
-                        if api_key:
-                            kwargs["api_key"] = api_key
-                            # Add API base if not already present
-                            if (
-                                "api_base" not in kwargs
-                                or kwargs.get("api_base") == "API_BASE_PRESENT"
-                            ):
-                                api_base = os.getenv(
-                                    "AZURE_OPENAI_ENDPOINT"
-                                ) or os.getenv("AZURE_API_BASE")
-                                if api_base:
-                                    kwargs["api_base"] = api_base
+                elif is_azure:
+                    # Fall back to API key for Azure
+                    api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv(
+                        "AZURE_API_KEY"
+                    )
+                    if api_key:
+                        kwargs["api_key"] = api_key
+                else:
+                    # Standard OpenAI authentication
+                    api_key = os.getenv("OPENAI_API_KEY")
+                    if api_key:
+                        kwargs["api_key"] = api_key
 
-                            # Add API version if not already present and available
-                            if "api_version" not in kwargs:
-                                api_version = os.getenv("AZURE_API_VERSION")
-                                if api_version:
-                                    kwargs["api_version"] = api_version
-                        else:
-                            # If no API key, try to use authentication headers
-                            auth_headers = get_auth_headers()
-                            if auth_headers:
-                                kwargs["extra_headers"] = auth_headers
-                                kwargs["api_key"] = None
-                    else:
-                        # For OpenAI models
-                        api_key = os.getenv("OPENAI_API_KEY")
-                        if api_key:
-                            kwargs["api_key"] = api_key
+                # Add API base if it was sanitized or not present
+                if is_azure and (
+                    "api_base" not in kwargs
+                    or kwargs.get("api_base") == "API_BASE_PRESENT"
+                ):
+                    api_base = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv(
+                        "AZURE_API_BASE"
+                    )
+                    if api_base:
+                        kwargs["api_base"] = api_base
+
+                # Add API version for Azure if not present
+                if is_azure and "api_version" not in kwargs:
+                    api_version = os.getenv("AZURE_API_VERSION")
+                    if api_version:
+                        kwargs["api_version"] = api_version
 
                 # Remove placeholders that were used to indicate presence
                 if kwargs.get("extra_headers") == "AUTH_HEADERS_PRESENT":
-                    if "extra_headers" in kwargs:
-                        del kwargs["extra_headers"]  # Remove placeholder
+                    del kwargs["extra_headers"]  # Remove placeholder
 
                 if kwargs.get("api_base") == "API_BASE_PRESENT":
-                    if "api_base" in kwargs:
-                        del kwargs["api_base"]  # Remove placeholder
-
-                # Handle max_tokens
-                max_tokens = model_info.get("max_tokens")
+                    del kwargs["api_base"]  # Remove placeholder
 
                 # Create the LM instance
                 try:
@@ -316,7 +335,6 @@ class CollaborativeStormLMConfigs(LMConfigs):
                     print(
                         f"Warning: Could not create {attr_name} with model {model}: {e}"
                     )
-                    # Don't attempt to create a fallback here
 
         return config
 
@@ -1146,44 +1164,40 @@ class CoStormRunner:
         if not data:
             raise ValueError("No data provided to construct CoStormRunner")
 
-        # Create a new LM config from lm_config data - pass the actual lm_config data, not nested
+        # Create a new LM config from lm_config data
         lm_config = CollaborativeStormLMConfigs.from_dict(data.get("lm_config", {}))
 
         # Create logging wrapper
         logging_wrapper = LoggingWrapper(lm_config)
 
-        # Create a basic encoder - don't add auth headers by default
-        encoder = Encoder()
+        # Determine if we should use header-based auth for the encoder
+        client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
+        client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
+            "AZURE_CLIENT_SECRET"
+        )
+        tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
+        api_base = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE")
 
-        # Only create an encoder with auth headers if there's evidence they were used before
-        uses_azure_auth = False
-        for attr_name in dir(lm_config):
-            if attr_name.endswith("_lm"):
-                lm = getattr(lm_config, attr_name, None)
-                if (
-                    lm
-                    and hasattr(lm, "kwargs")
-                    and isinstance(getattr(lm, "kwargs", {}), dict)
-                    and "extra_headers" in getattr(lm, "kwargs", {})
-                ):
-                    uses_azure_auth = True
-                    break
-
-        # Only use auth headers if they were previously used
-        if uses_azure_auth:
+        # Create the encoder with appropriate authentication
+        encoder = None
+        if all([client_id, client_secret, tenant_id]):
+            # Use header-based authentication for DOW environment
             auth_headers = get_auth_headers()
             if auth_headers:
                 encoder = Encoder(
-                    api_key=None,
-                    api_base=os.getenv("AZURE_OPENAI_ENDPOINT")
-                    or os.getenv("AZURE_API_BASE"),
+                    api_key=None,  # Set explicitly to None for header auth
+                    api_base=api_base,
                     extra_headers=auth_headers,
                 )
+
+        # Fall back to standard encoder if header auth wasn't set up
+        if encoder is None:
+            encoder = Encoder()
 
         # Create runner args from the data
         runner_args = RunnerArgument.from_dict(data["runner_argument"])
 
-        # Create retriever
+        # Create retriever with API key from environment variable
         retriever = BingSearch(
             bing_search_api_key=os.getenv("BING_SEARCH_API_KEY"),
             k=runner_args.retrieve_top_k,
