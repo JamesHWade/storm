@@ -16,10 +16,14 @@ class EventLog:
         self.child_events = {}
 
     def record_start_time(self):
-        self.start_time = datetime.now(pytz.utc)  # Store in UTC for consistent timezone conversion
+        self.start_time = datetime.now(
+            pytz.utc
+        )  # Store in UTC for consistent timezone conversion
 
     def record_end_time(self):
-        self.end_time = datetime.now(pytz.utc)  # Store in UTC for consistent timezone conversion
+        self.end_time = datetime.now(
+            pytz.utc
+        )  # Store in UTC for consistent timezone conversion
 
     def get_total_time(self):
         if self.start_time and self.end_time:
@@ -29,13 +33,17 @@ class EventLog:
     def get_start_time(self):
         if self.start_time:
             # Format to milliseconds
-            return self.start_time.astimezone(CALIFORNIA_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            return self.start_time.astimezone(CALIFORNIA_TZ).strftime(
+                "%Y-%m-%d %H:%M:%S.%f"
+            )[:-3]
         return None
 
     def get_end_time(self):
         if self.end_time:
             # Format to milliseconds
-            return self.end_time.astimezone(CALIFORNIA_TZ).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+            return self.end_time.astimezone(CALIFORNIA_TZ).strftime(
+                "%Y-%m-%d %H:%M:%S.%f"
+            )[:-3]
         return None
 
     def add_child_event(self, child_event):
@@ -52,147 +60,235 @@ class LoggingWrapper:
         self.current_pipeline_stage = None
         self.event_stack = []
         self.pipeline_stage_active = False
+        self.pipeline_stage_stack = []  # Track nested pipeline stages
 
     def _pipeline_stage_start(self, pipeline_stage: str):
+        # Save the current state if a pipeline stage is already active
         if self.pipeline_stage_active:
-            raise RuntimeError(
-                "A pipeline stage is already active. End the current stage before starting a new one."
+            self.pipeline_stage_stack.append(
+                {
+                    "stage": self.current_pipeline_stage,
+                    "event_stack": self.event_stack.copy(),
+                }
             )
 
+        # Initialize new pipeline stage
         self.current_pipeline_stage = pipeline_stage
-        self.logging_dict[pipeline_stage] = {
-            "time_usage": {},
-            "lm_usage": {},
-            "lm_history": [],
-            "query_count": 0,
-        }
+        if pipeline_stage not in self.logging_dict:
+            self.logging_dict[pipeline_stage] = {
+                "time_usage": {},
+                "lm_usage": {},
+                "lm_history": [],
+                "query_count": 0,
+                "total_wall_time": 0,
+            }
         self.pipeline_stage_active = True
+        self.event_stack = []  # Reset event stack for the new pipeline stage
 
     def _event_start(self, event_name: str):
+        # Silently return if no pipeline stage is active
         if not self.pipeline_stage_active:
-            raise RuntimeError("No pipeline stage is currently active.")
+            return
 
-        if not self.event_stack and self.current_pipeline_stage:
-            # Top-level event (directly under the pipeline stage)
-            if event_name not in self.logging_dict[self.current_pipeline_stage]["time_usage"]:
+        try:
+            if not self.event_stack and self.current_pipeline_stage:
+                # Top-level event (directly under the pipeline stage)
+                if (
+                    event_name
+                    not in self.logging_dict[self.current_pipeline_stage]["time_usage"]
+                ):
+                    event = EventLog(event_name=event_name)
+                    event.record_start_time()
+                    self.logging_dict[self.current_pipeline_stage]["time_usage"][
+                        event_name
+                    ] = event
+                    self.event_stack.append(event)
+                else:
+                    self.logging_dict[self.current_pipeline_stage]["time_usage"][
+                        event_name
+                    ].record_start_time()
+                    self.event_stack.append(
+                        self.logging_dict[self.current_pipeline_stage]["time_usage"][
+                            event_name
+                        ]
+                    )
+            elif self.event_stack:
+                # Nested event (under another event)
+                parent_event = self.event_stack[-1]
+                if event_name not in parent_event.get_child_events():
+                    event = EventLog(event_name=event_name)
+                    event.record_start_time()
+                    parent_event.add_child_event(event)
+                    self.event_stack.append(event)
+                else:
+                    child_event = parent_event.get_child_events()[event_name]
+                    child_event.record_start_time()
+                    self.event_stack.append(child_event)
+            else:
+                # Create a new top-level event if there's no event stack
                 event = EventLog(event_name=event_name)
                 event.record_start_time()
-                self.logging_dict[self.current_pipeline_stage]["time_usage"][event_name] = event
-                self.event_stack.append(event)
-            else:
                 self.logging_dict[self.current_pipeline_stage]["time_usage"][
                     event_name
-                ].record_start_time()
-        elif self.event_stack:
-            # Nested event (under another event)
-            parent_event = self.event_stack[-1]
-            if event_name not in parent_event.get_child_events():
-                event = EventLog(event_name=event_name)
-                event.record_start_time()
-                parent_event.add_child_event(event)
-                self.logging_dict[self.current_pipeline_stage]["time_usage"][event_name] = event
+                ] = event
                 self.event_stack.append(event)
-            else:
-                parent_event.get_child_events()[event_name].record_start_time()
-        else:
-            raise RuntimeError(
-                "Cannot start an event without an active pipeline stage or parent event."
-            )
+        except Exception as e:
+            # Log the error but don't disrupt workflow
+            print(f"Warning: Error starting event '{event_name}': {e}")
 
     def _event_end(self, event_name: str):
+        # Silently return if no pipeline stage is active
         if not self.pipeline_stage_active:
-            raise RuntimeError("No pipeline stage is currently active.")
+            return
 
-        if not self.event_stack:
-            raise RuntimeError("No parent event is currently active.")
+        try:
+            # If event stack is empty, just return rather than raising an error
+            if not self.event_stack:
+                return
 
-        if self.event_stack:
-            current_event_log = self.event_stack[-1]
-            if event_name in current_event_log.get_child_events():
-                current_event_log.get_child_events()[event_name].record_end_time()
-            elif event_name in self.logging_dict[self.current_pipeline_stage]["time_usage"]:
-                self.logging_dict[self.current_pipeline_stage]["time_usage"][
-                    event_name
-                ].record_end_time()
-            else:
-                raise AssertionError(
-                    f"Failure to record end time for event {event_name}. Start time is not recorded."
-                )
-            if current_event_log.event_name == event_name:
+            current_event = self.event_stack[-1]
+            # Only pop if the event name matches to maintain proper nesting
+            if current_event.event_name == event_name:
+                current_event.record_end_time()
                 self.event_stack.pop()
-        else:
-            raise RuntimeError("Cannot end an event without an active parent event.")
+            else:
+                # Try to find and end the event by name, but don't throw errors
+                for i, event in enumerate(reversed(self.event_stack)):
+                    if event.event_name == event_name:
+                        event.record_end_time()
+                        # Don't pop events we're skipping over - just record the end time
+                        break
+        except Exception as e:
+            # Log the error but don't disrupt workflow
+            print(f"Warning: Error ending event '{event_name}': {e}")
 
     def _pipeline_stage_end(self):
         if not self.pipeline_stage_active:
-            raise RuntimeError("No pipeline stage is currently active to end.")
+            return
 
-        self.logging_dict[self.current_pipeline_stage]["lm_usage"] = (
-            self.lm_config.collect_and_reset_lm_usage()
-        )
-        self.logging_dict[self.current_pipeline_stage]["lm_history"] = (
-            self.lm_config.collect_and_reset_lm_history()
-        )
-        self.pipeline_stage_active = False
+        try:
+            # Record LM usage
+            self.logging_dict[self.current_pipeline_stage]["lm_usage"] = (
+                self.lm_config.collect_and_reset_lm_usage()
+                if hasattr(self.lm_config, "collect_and_reset_lm_usage")
+                else {}
+            )
+
+            # Record LM history if the method exists
+            if hasattr(self.lm_config, "collect_and_reset_lm_history"):
+                self.logging_dict[self.current_pipeline_stage][
+                    "lm_history"
+                ] = self.lm_config.collect_and_reset_lm_history()
+
+            # Restore previous pipeline stage if there was one
+            if self.pipeline_stage_stack:
+                previous = self.pipeline_stage_stack.pop()
+                self.current_pipeline_stage = previous["stage"]
+                self.event_stack = previous["event_stack"]
+            else:
+                self.pipeline_stage_active = False
+                self.current_pipeline_stage = None
+                self.event_stack = []
+        except Exception as e:
+            # Log the error but don't disrupt workflow
+            print(f"Warning: Error ending pipeline stage: {e}")
+            # Ensure we reset the state even if there's an error
+            self.pipeline_stage_active = False
+            self.event_stack = []
 
     def add_query_count(self, count):
         if not self.pipeline_stage_active:
-            raise RuntimeError("No pipeline stage is currently active to add query count.")
+            return  # Silently ignore if no pipeline stage active
 
-        self.logging_dict[self.current_pipeline_stage]["query_count"] += count
+        try:
+            self.logging_dict[self.current_pipeline_stage]["query_count"] += count
+        except Exception as e:
+            # Log the error but don't disrupt workflow
+            print(f"Warning: Error adding query count: {e}")
 
     @contextmanager
     def log_event(self, event_name):
-        if not self.pipeline_stage_active:
-            raise RuntimeError("No pipeline stage is currently active.")
+        try:
+            self._event_start(event_name)
+            yield
+        except Exception as e:
+            # Re-raise the original exception after recording the event end
+            original_exception = e
+            raise_exception = True
+        else:
+            raise_exception = False
+        finally:
+            try:
+                self._event_end(event_name)
+            except Exception as e:
+                print(f"Warning: Error in log_event cleanup for '{event_name}': {e}")
 
-        self._event_start(event_name)
-        yield
-        self._event_end(event_name)
+            if raise_exception:
+                raise original_exception
 
     @contextmanager
     def log_pipeline_stage(self, pipeline_stage):
-        was_active = self.pipeline_stage_active
-        previous_stage = self.current_pipeline_stage
-        
         start_time = time.time()
         try:
-            # Only start a new pipeline stage if one isn't already active
-            if not was_active:
-                self._pipeline_stage_start(pipeline_stage)
+            self._pipeline_stage_start(pipeline_stage)
             yield
         except Exception as e:
-            print(f"Error occurred during pipeline stage '{pipeline_stage}': {e}")
-            raise  # Re-raise the exception after logging it
+            # Re-raise the original exception after recording pipeline end
+            original_exception = e
+            raise_exception = True
+        else:
+            raise_exception = False
         finally:
-            # Only end the pipeline stage if we started it
-            if not was_active:
-                try:
-                    self.logging_dict[self.current_pipeline_stage]["total_wall_time"] = (
+            try:
+                # Calculate wall time before ending the pipeline stage
+                if (
+                    self.pipeline_stage_active
+                    and self.current_pipeline_stage == pipeline_stage
+                ):
+                    self.logging_dict[pipeline_stage]["total_wall_time"] = (
                         time.time() - start_time
                     )
-                    self._pipeline_stage_end()
-                except Exception as e:
-                    print(f"Error ending pipeline stage '{pipeline_stage}': {e}")
+                self._pipeline_stage_end()
+            except Exception as e:
+                print(
+                    f"Warning: Error in log_pipeline_stage cleanup for '{pipeline_stage}': {e}"
+                )
+
+            if raise_exception:
+                raise original_exception
 
     def dump_logging_and_reset(self, reset_logging=True):
         log_dump = {}
         for pipeline_stage, pipeline_log in self.logging_dict.items():
-            time_stamp_log = {
-                event_name: {
-                    "total_time_seconds": event.get_total_time(),
-                    "start_time": event.get_start_time(),
-                    "end_time": event.get_end_time(),
-                }
-                for event_name, event in pipeline_log["time_usage"].items()
-            }
+            time_stamp_log = {}
+
+            # Handle time usage entries
+            for event_name, event in pipeline_log.get("time_usage", {}).items():
+                if event:  # Ensure the event exists
+                    time_stamp_log[event_name] = {
+                        "total_time_seconds": event.get_total_time(),
+                        "start_time": event.get_start_time(),
+                        "end_time": event.get_end_time(),
+                    }
+
+            # Ensure all required keys exist
+            for key in ["lm_usage", "lm_history", "query_count", "total_wall_time"]:
+                if key not in pipeline_log:
+                    pipeline_log[key] = {} if key in ["lm_usage", "lm_history"] else 0
+
             log_dump[pipeline_stage] = {
                 "time_usage": time_stamp_log,
-                "lm_usage": pipeline_log["lm_usage"],
-                "lm_history": pipeline_log["lm_history"],
-                "query_count": pipeline_log["query_count"],
-                "total_wall_time": pipeline_log["total_wall_time"],
+                "lm_usage": pipeline_log.get("lm_usage", {}),
+                "lm_history": pipeline_log.get("lm_history", []),
+                "query_count": pipeline_log.get("query_count", 0),
+                "total_wall_time": pipeline_log.get("total_wall_time", 0),
             }
+
         if reset_logging:
             self.logging_dict.clear()
+            self.pipeline_stage_active = False
+            self.current_pipeline_stage = None
+            self.event_stack = []
+            self.pipeline_stage_stack = []
+
         return log_dump
