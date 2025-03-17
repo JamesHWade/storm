@@ -117,7 +117,9 @@ class CollaborativeStormLMConfigs(LMConfigs):
     def collect_and_reset_lm_usage(self):
         lm_usage = {}
         for attr_name in self.__dict__:
-            if "_lm" in attr_name and hasattr(getattr(self, attr_name), "get_usage_and_reset"):
+            if "_lm" in attr_name and hasattr(
+                getattr(self, attr_name), "get_usage_and_reset"
+            ):
                 usage = getattr(self, attr_name).get_usage_and_reset()
                 if any(
                     value["prompt_tokens"] != 0 or value["completion_tokens"] != 0
@@ -153,19 +155,34 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 if hasattr(attr_value, "kwargs"):
                     # Make a sanitized copy to avoid reference issues and remove sensitive data
                     sanitized_kwargs = {}
-                    
+
                     # Only copy non-sensitive keys
                     sensitive_keys = [
-                        "api_key", "API_KEY", "apikey", "api-key", "token", "auth", "authorization",
-                        "auth_token", "bearer", "secret", "password", "credential", "client_secret", 
-                        "client_id", "tenant_id"
+                        "api_key",
+                        "API_KEY",
+                        "apikey",
+                        "api-key",
+                        "token",
+                        "auth",
+                        "authorization",
+                        "auth_token",
+                        "bearer",
+                        "secret",
+                        "password",
+                        "credential",
+                        "client_secret",
+                        "client_id",
+                        "tenant_id",
                     ]
-                    
+
                     for k, v in attr_value.kwargs.items():
                         # Skip any key that appears to contain sensitive information
-                        if any(sensitive_term in k.lower() for sensitive_term in sensitive_keys):
+                        if any(
+                            sensitive_term in k.lower()
+                            for sensitive_term in sensitive_keys
+                        ):
                             continue
-                            
+
                         # Handle extra_headers specially
                         if k == "extra_headers":
                             sanitized_kwargs[k] = "AUTH_HEADERS_PRESENT"
@@ -176,13 +193,16 @@ class CollaborativeStormLMConfigs(LMConfigs):
                         # Include other non-sensitive values
                         else:
                             sanitized_kwargs[k] = v
-                    
+
                     # Only add kwargs to model_info if there are any non-sensitive keys
                     if sanitized_kwargs:
                         model_info["kwargs"] = sanitized_kwargs
-                        
+
                     # Add a flag to indicate this model used authentication
-                    if "api_key" in attr_value.kwargs or "extra_headers" in attr_value.kwargs:
+                    if (
+                        "api_key" in attr_value.kwargs
+                        or "extra_headers" in attr_value.kwargs
+                    ):
                         model_info["used_authentication"] = True
 
                 config_dict[attr_name] = model_info
@@ -193,14 +213,22 @@ class CollaborativeStormLMConfigs(LMConfigs):
     def from_dict(cls, data):
         """
         Constructs a CollaborativeStormLMConfigs instance from a dictionary representation.
-        Fails if no data is provided.
-        
-        Note: This method expects to run in an environment where API keys and authentication
-        details are available through environment variables, not through the serialized data.
+        Restores sensitive information from environment variables instead of expecting it in the data.
+
+        Args:
+            data (dict): The dictionary representation without sensitive information
+
+        Returns:
+            CollaborativeStormLMConfigs: A fully configured instance with authentication restored
+
+        Raises:
+            ValueError: If no data is provided
         """
         # If there's no data, raise an exception
         if not data:
-            raise ValueError("No data provided to construct CollaborativeStormLMConfigs")
+            raise ValueError(
+                "No data provided to construct CollaborativeStormLMConfigs"
+            )
 
         # Create a new instance
         config = cls()
@@ -224,22 +252,29 @@ class CollaborativeStormLMConfigs(LMConfigs):
                 # Extract parameters from model_info
                 model = model_info.get("model")
                 kwargs = model_info.get("kwargs", {}).copy()
-                
+
                 # Handle authentication based on environment variables, not from serialized data
                 used_authentication = model_info.get("used_authentication", False)
                 if used_authentication:
                     # Check if this is an Azure model
-                    if model and model.startswith("azure/"):
+                    if model and "azure" in str(model).lower():
                         # Try to get Azure API key first
-                        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv("AZURE_API_KEY")
+                        api_key = os.getenv("AZURE_OPENAI_API_KEY") or os.getenv(
+                            "AZURE_API_KEY"
+                        )
                         if api_key:
                             kwargs["api_key"] = api_key
                             # Add API base if not already present
-                            if "api_base" not in kwargs or kwargs.get("api_base") == "API_BASE_PRESENT":
-                                api_base = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE")
+                            if (
+                                "api_base" not in kwargs
+                                or kwargs.get("api_base") == "API_BASE_PRESENT"
+                            ):
+                                api_base = os.getenv(
+                                    "AZURE_OPENAI_ENDPOINT"
+                                ) or os.getenv("AZURE_API_BASE")
                                 if api_base:
                                     kwargs["api_base"] = api_base
-                                    
+
                             # Add API version if not already present and available
                             if "api_version" not in kwargs:
                                 api_version = os.getenv("AZURE_API_VERSION")
@@ -256,33 +291,31 @@ class CollaborativeStormLMConfigs(LMConfigs):
                         api_key = os.getenv("OPENAI_API_KEY")
                         if api_key:
                             kwargs["api_key"] = api_key
-                
+
                 # Remove placeholders that were used to indicate presence
                 if kwargs.get("extra_headers") == "AUTH_HEADERS_PRESENT":
                     if "extra_headers" in kwargs:
                         del kwargs["extra_headers"]  # Remove placeholder
-                        
+
                 if kwargs.get("api_base") == "API_BASE_PRESENT":
                     if "api_base" in kwargs:
                         del kwargs["api_base"]  # Remove placeholder
 
                 # Handle max_tokens
-                max_tokens = kwargs.pop("max_tokens", model_info.get("max_tokens"))
-
-                # Handle model_type
-                model_type = kwargs.pop("model_type", "chat")
+                max_tokens = model_info.get("max_tokens")
 
                 # Create the LM instance
                 try:
                     lm = LMClass(
                         model=model,
                         max_tokens=max_tokens,
-                        model_type=model_type,
                         **kwargs,
                     )
                     setattr(config, attr_name, lm)
                 except Exception as e:
-                    print(f"Warning: Could not create {attr_name} with model {model}: {e}")
+                    print(
+                        f"Warning: Could not create {attr_name} with model {model}: {e}"
+                    )
                     # Don't attempt to create a fallback here
 
         return config
@@ -301,7 +334,9 @@ class RunnerArgument:
     )
     max_search_queries: int = field(
         default=2,
-        metadata={"help": "Maximum number of search queries to consider for each question."},
+        metadata={
+            "help": "Maximum number of search queries to consider for each question."
+        },
     )
     total_conv_turn: int = field(
         default=20,
@@ -317,7 +352,9 @@ class RunnerArgument:
     )
     warmstart_max_num_experts: int = field(
         default=3,
-        metadata={"help": "Max number of experts in perspective guided QA in warm start process"},
+        metadata={
+            "help": "Max number of experts in perspective guided QA in warm start process"
+        },
     )
     warmstart_max_turn_per_experts: int = field(
         default=2,
@@ -348,7 +385,9 @@ class RunnerArgument:
     )
     node_expansion_trigger_count: int = field(
         default=10,
-        metadata={"help": "Trigger node expansion for node that contain more than N snippets"},
+        metadata={
+            "help": "Trigger node expansion for node that contain more than N snippets"
+        },
     )
     disable_moderator: bool = field(
         default=False,
@@ -505,7 +544,9 @@ class DiscourseManager:
                 )
             )
 
-    def _should_generate_question(self, conversation_history: List[ConversationTurn]) -> bool:
+    def _should_generate_question(
+        self, conversation_history: List[ConversationTurn]
+    ) -> bool:
         consecutive_non_questioning_turn = 0
         for conv_turn in reversed(conversation_history):
             if conv_turn.utterance_type not in [
@@ -544,11 +585,11 @@ class DiscourseManager:
     def create_researcher(self, role_name: str, role_description: str):
         """
         Create a Researcher agent with the specified role name and description.
-        
+
         Args:
             role_name (str): The name of the researcher role (e.g., "Innovation Scientist").
             role_description (str): A description of the researcher's approach and focus.
-            
+
         Returns:
             Researcher: A new Researcher agent configured for the current topic.
         """
@@ -597,8 +638,9 @@ class DiscourseManager:
             next_turn_policy.agent = self.moderator
             if not dry_run:
                 self.next_turn_moderator_override = False
-        elif not self.runner_argument.disable_moderator and self._should_generate_question(
-            conversation_history
+        elif (
+            not self.runner_argument.disable_moderator
+            and self._should_generate_question(conversation_history)
         ):
             next_turn_policy.agent = self.moderator
             next_turn_policy.should_reorganize_knowledge_base = True
@@ -634,14 +676,18 @@ class DiscourseManager:
         """
         return self.invoke_experts(agent_indices=list(range(len(self.experts))))
 
-    def add_researcher_to_discussion(self, role_name: str = "Research Scientist", role_description: str = "Specializes in generating novel research ideas and experimental plans"):
+    def add_researcher_to_discussion(
+        self,
+        role_name: str = "Research Scientist",
+        role_description: str = "Specializes in generating novel research ideas and experimental plans",
+    ):
         """
         Add a Researcher agent to the current discussion.
-        
+
         Args:
             role_name (str, optional): The name of the researcher role. Defaults to "Research Scientist".
             role_description (str, optional): Description of the researcher's focus. Defaults to a general description.
-            
+
         Returns:
             int: The index of the newly added researcher in the experts list.
         """
@@ -693,7 +739,7 @@ class CoStormRunner:
             topic=args.topic,
             knowledge_base_lm=lm_config.knowledge_base_lm,
             node_expansion_trigger_count=args.node_expansion_trigger_count,
-            encoder=encoder
+            encoder=encoder,
         )
         self.report = None
         self.conversation_history = []
@@ -710,27 +756,33 @@ class CoStormRunner:
             rm=rm,
             callback_handler=callback_handler,
         )
-        
-    def add_researcher(self, role_name: str = "Research Scientist", role_description: str = "Specializes in generating novel research ideas and experimental plans"):
+
+    def add_researcher(
+        self,
+        role_name: str = "Research Scientist",
+        role_description: str = "Specializes in generating novel research ideas and experimental plans",
+    ):
         """
         Add a Researcher agent to the current discussion.
-        
+
         Args:
             role_name (str, optional): The name of the researcher role. Defaults to "Research Scientist".
             role_description (str, optional): Description of the researcher's focus. Defaults to a general description.
-            
+
         Returns:
             int: The index of the newly added researcher in the experts list.
         """
-        return self.discourse_manager.add_researcher_to_discussion(role_name, role_description)
+        return self.discourse_manager.add_researcher_to_discussion(
+            role_name, role_description
+        )
 
     def get_researcher(self, create_if_missing=True):
         """
         Get a Researcher agent from the current experts list.
-        
+
         Args:
             create_if_missing (bool, optional): If True, creates a new Researcher if none exists. Defaults to True.
-            
+
         Returns:
             Researcher: A Researcher agent instance, or None if no Researcher exists and create_if_missing is False.
         """
@@ -738,29 +790,29 @@ class CoStormRunner:
         for expert in self.discourse_manager.experts:
             if isinstance(expert, Researcher):
                 return expert
-                
+
         # Create a new researcher if requested
         if create_if_missing:
             researcher_index = self.add_researcher()
             return self.discourse_manager.experts[researcher_index]
-        
+
         return None
-    
+
     def generate_research_idea(self, context=None):
         """
         Generate a novel research idea based on the current knowledge base and conversation.
-        
+
         This method implements a two-stage approach to research idea generation:
         1. First, it generates multiple brief research idea candidates (5-10 ideas)
         2. Then, it evaluates each candidate, selects the most promising one, and develops it fully
-        
+
         The result includes both the list of initial candidates and the fully developed selected idea,
         along with reasoning for the selection.
-        
+
         Args:
             context (str, optional): Additional context to consider when generating the idea.
                                     If None, the last utterance from the conversation history is used.
-                                    
+
         Returns:
             str: A comprehensive research idea output containing:
                 - List of idea candidates (brief one-sentence descriptions)
@@ -770,14 +822,14 @@ class CoStormRunner:
         # Wrap the entire operation in a pipeline stage context
         with self.logging_wrapper.log_pipeline_stage("research idea generation"):
             researcher = self.get_researcher()
-            
+
             # Get the knowledge base summary
             knowledge_summary = self.knowledge_base.get_knowledge_base_summary()
-            
+
             # Create a formatted version of recent conversation history
             # Include much more conversation context - up to 10 turns or more
             conversation_context = ""
-            if hasattr(self, 'conversation_history') and self.conversation_history:
+            if hasattr(self, "conversation_history") and self.conversation_history:
                 # Use more of the conversation history (up to 20 turns)
                 recent_turns = self.conversation_history[-20:]
                 conversation_context = "Recent Conversation History:\n"
@@ -785,25 +837,35 @@ class CoStormRunner:
                     # Include more details about each turn
                     role = turn.role
                     utterance = turn.utterance
-                    utterance_type = turn.utterance_type if hasattr(turn, 'utterance_type') else "Message"
-                    
+                    utterance_type = (
+                        turn.utterance_type
+                        if hasattr(turn, "utterance_type")
+                        else "Message"
+                    )
+
                     conversation_context += f"Turn {len(self.conversation_history) - len(recent_turns) + i + 1} - {role} ({utterance_type}):\n{utterance}\n\n"
-            
+
             # Add report if available
             report_context = ""
-            if hasattr(self, 'report') and self.report:
+            if hasattr(self, "report") and self.report:
                 # Include more of the report (up to 5000 chars)
-                report_context = "Current Research Report:\n" + self.report[:5000] + "...\n\n"
-            
+                report_context = (
+                    "Current Research Report:\n" + self.report[:5000] + "...\n\n"
+                )
+
             # Use the provided context or the last utterance from conversation history
             immediate_context = context
-            if immediate_context is None and hasattr(self, 'conversation_history') and self.conversation_history:
+            if (
+                immediate_context is None
+                and hasattr(self, "conversation_history")
+                and self.conversation_history
+            ):
                 immediate_context = self.conversation_history[-1].utterance
                 immediate_context = f"Most Recent Utterance: {self.conversation_history[-1].role} - {immediate_context}"
-            
+
             # Combine all context information
             full_context = f"{conversation_context}\n{report_context}\nImmediate Context: {immediate_context or ''}"
-            
+
             # Generate the idea using the new two-stage approach in the Researcher class
             # This will:
             # 1. Generate multiple brief idea candidates
@@ -812,118 +874,118 @@ class CoStormRunner:
             return researcher.generate_idea(
                 topic=self.args.topic,
                 knowledge_summary=knowledge_summary,
-                conversation_context=full_context
+                conversation_context=full_context,
             )
-    
+
     def assess_research_idea(self, idea):
         """
         Assess a research idea for novelty, feasibility, value, and relevance.
-        
+
         Args:
             idea (str): The research idea to assess
-            
+
         Returns:
             str: A detailed assessment of the idea
         """
         # Wrap in pipeline stage context
         with self.logging_wrapper.log_pipeline_stage("research idea assessment"):
             researcher = self.get_researcher()
-            return researcher.assess_idea(
-                idea=idea,
-                topic=self.args.topic
-            )
-    
+            return researcher.assess_idea(idea=idea, topic=self.args.topic)
+
     def create_experimental_plan(self, idea, assessment=None):
         """
         Create an experimental plan to test a research idea.
-        
+
         Args:
             idea (str): The research idea to develop a plan for
             assessment (str, optional): An assessment of the idea. If None, one will be generated.
-            
+
         Returns:
             str: A detailed experimental plan
         """
         # Wrap in pipeline stage context
         with self.logging_wrapper.log_pipeline_stage("experimental plan creation"):
             researcher = self.get_researcher()
-            
+
             # Generate an assessment if none is provided
             if assessment is None:
                 assessment = self.assess_research_idea(idea)
-                
-            return researcher.create_experimental_plan(
-                idea=idea,
-                assessment=assessment
-            )
-    
+
+            return researcher.create_experimental_plan(idea=idea, assessment=assessment)
+
     def refine_research_idea(self, original_idea, feedback, previous_plan=None):
         """
         Refine a research idea based on specific feedback.
-        
+
         Args:
             original_idea (str): The original research idea to refine
             feedback (str): Feedback containing critiques, suggestions, or questions about the idea
             previous_plan (str, optional): Previous experimental plan if available
-            
+
         Returns:
             str: A refined version of the research idea that addresses the feedback
         """
         # Wrap in pipeline stage context
         with self.logging_wrapper.log_pipeline_stage("research idea refinement"):
             researcher = self.get_researcher()
-            
+
             # Create a formatted version of recent conversation history for additional context
             conversation_context = ""
-            if hasattr(self, 'conversation_history') and self.conversation_history:
+            if hasattr(self, "conversation_history") and self.conversation_history:
                 # Limit to last 5 turns to keep context manageable
                 recent_turns = self.conversation_history[-5:]
                 conversation_context = "Recent Conversation Context:\n"
                 for i, turn in enumerate(recent_turns):
                     conversation_context += f"{turn.role}: {turn.utterance}\n\n"
-            
+
             # Add report if available for additional research context
             report_context = ""
-            if hasattr(self, 'report') and self.report:
-                report_context = "Current Research Report Context:\n" + self.report[:2000] + "...\n\n"
-            
+            if hasattr(self, "report") and self.report:
+                report_context = (
+                    "Current Research Report Context:\n"
+                    + self.report[:2000]
+                    + "...\n\n"
+                )
+
             # Add previous experimental plan if available
             plan_context = ""
             if previous_plan:
                 plan_context = "Previous Experimental Plan:\n" + previous_plan + "\n\n"
-                
+
             # Format original idea for reference (even though it's passed as a parameter)
             idea_context = "Original Research Idea:\n" + original_idea + "\n\n"
-            
+
             # Enhance feedback with additional context
             enhanced_feedback = f"{feedback}\n\n{idea_context}{conversation_context}\n{report_context}\n{plan_context}"
-            
+
             return researcher.refine_idea(
                 original_idea=original_idea,
                 feedback=enhanced_feedback,
-                topic=self.args.topic
+                topic=self.args.topic,
             )
-    
-    def research_pipeline(self, context=None, add_to_conversation=True, refine_idea_from_assessment=False):
+
+    def research_pipeline(
+        self, context=None, add_to_conversation=True, refine_idea_from_assessment=False
+    ):
         """
         Run a complete research pipeline: generate multiple idea candidates, select/develop the best one,
         assess it, and create an experimental plan.
-        
+
         The pipeline now uses a two-stage idea generation approach:
         1. First, generate multiple brief research idea candidates (5-10 ideas)
         2. Then, evaluate each candidate, select the most promising one, and develop it fully
-        
+
         The pipeline leverages comprehensive conversation history and previous research to provide
         rich context for idea generation and refinement, making the research process more cohesive and informed.
-        
+
         Args:
             context (str, optional): Additional context to consider when generating the idea.
             add_to_conversation (bool, optional): Whether to add the research output to the conversation history.
                                                  Defaults to True.
-            refine_idea_from_assessment (bool, optional): Whether to use the assessment as feedback to refine 
+            refine_idea_from_assessment (bool, optional): Whether to use the assessment as feedback to refine
                                                          the original idea before creating the plan.
                                                          Defaults to False.
-            
+
         Returns:
             dict: A dictionary containing:
                 - idea: The complete idea output with candidates and developed idea
@@ -936,7 +998,7 @@ class CoStormRunner:
         with self.logging_wrapper.log_pipeline_stage("complete research pipeline"):
             # Generate initial ideas and select the best one
             idea_output = self.generate_research_idea(context=context)
-            
+
             # Extract the developed idea for assessment
             idea_parts = idea_output.split("## Developed Research Idea:")
             if len(idea_parts) > 1:
@@ -944,36 +1006,42 @@ class CoStormRunner:
                 # Include selection rationale for context
                 selection_parts = idea_output.split("## Selection Rationale:")
                 if len(selection_parts) > 1:
-                    selection_rationale = selection_parts[1].split("## Developed Research Idea:")[0].strip()
+                    selection_rationale = (
+                        selection_parts[1]
+                        .split("## Developed Research Idea:")[0]
+                        .strip()
+                    )
                     idea_for_assessment = f"# Research Idea\n{developed_idea}\n\n# Selection Context\n{selection_rationale}"
                 else:
                     idea_for_assessment = f"# Research Idea\n{developed_idea}"
             else:
                 # Fallback if parsing fails
                 idea_for_assessment = idea_output
-            
+
             # Assess the idea
             assessment = self.assess_research_idea(idea_for_assessment)
-            
+
             # Optionally refine the idea based on the assessment
             refined_idea = None
             if refine_idea_from_assessment:
                 # Generate a preliminary plan based on the original idea to provide context for refinement
-                preliminary_plan = self.create_experimental_plan(idea_for_assessment, assessment)
-                
+                preliminary_plan = self.create_experimental_plan(
+                    idea_for_assessment, assessment
+                )
+
                 # Use the assessment as feedback to refine the idea, with the preliminary plan as context
                 refined_idea = self.refine_research_idea(
-                    original_idea=idea_for_assessment, 
-                    feedback=f"Assessment of Original Idea:\n{assessment}", 
-                    previous_plan=preliminary_plan
+                    original_idea=idea_for_assessment,
+                    feedback=f"Assessment of Original Idea:\n{assessment}",
+                    previous_plan=preliminary_plan,
                 )
-                
+
                 # Create the final plan based on the refined idea
                 plan = self.create_experimental_plan(refined_idea, assessment)
             else:
                 # Create plan based on the original idea
                 plan = self.create_experimental_plan(idea_for_assessment, assessment)
-            
+
             # Build result dictionary - now with more detailed components
             result = {
                 "idea_output": idea_output,  # Complete formatted output with candidates and selection
@@ -981,20 +1049,26 @@ class CoStormRunner:
                 "assessment": assessment,
                 "plan": plan,
                 # Extract idea candidates if possible (for easier access)
-                "idea_candidates": idea_output.split("# Selected Idea")[0].replace("# Research Idea Candidates\n", "").strip() if "# Research Idea Candidates" in idea_output else ""
+                "idea_candidates": (
+                    idea_output.split("# Selected Idea")[0]
+                    .replace("# Research Idea Candidates\n", "")
+                    .strip()
+                    if "# Research Idea Candidates" in idea_output
+                    else ""
+                ),
             }
-            
+
             # Add refined idea to result if applicable
             if refined_idea:
                 result["refined_idea"] = refined_idea
                 # Also include the preliminary plan in the result for reference
                 result["preliminary_plan"] = preliminary_plan
-                
+
             # Optionally add the research output to conversation history
-            if add_to_conversation and hasattr(self, 'conversation_history'):
+            if add_to_conversation and hasattr(self, "conversation_history"):
                 # Fix the import - use absolute import instead of relative import
                 from knowledge_storm.dataclass import ConversationTurn
-                
+
                 # Add the output as a conversation turn from the researcher
                 researcher = self.get_researcher()
                 if researcher:
@@ -1026,23 +1100,23 @@ class CoStormRunner:
 # Experimental Plan
 {plan}
 """
-                    
+
                     # Create and add the turn
                     turn = ConversationTurn(
                         role=researcher.role_name,
                         raw_utterance=conversation_response,
                         utterance=conversation_response,
-                        utterance_type="Research Output"
+                        utterance_type="Research Output",
                     )
                     self.conversation_history.append(turn)
-                    
+
                     # Update knowledge base with the new information
                     self.knowledge_base.update_from_conv_turn(
                         conv_turn=turn,
                         allow_create_new_node=True,
-                        insert_under_root=False
+                        insert_under_root=False,
                     )
-            
+
             return result
 
     def to_dict(self):
@@ -1050,8 +1124,12 @@ class CoStormRunner:
             "topic": self.args.topic,
             "runner_argument": self.args.to_dict(),
             "lm_config": self.lm_config.to_dict(),
-            "conversation_history": [turn.to_dict() for turn in self.conversation_history],
-            "warmstart_conv_archive": [turn.to_dict() for turn in self.warmstart_conv_archive],
+            "conversation_history": [
+                turn.to_dict() for turn in self.conversation_history
+            ],
+            "warmstart_conv_archive": [
+                turn.to_dict() for turn in self.warmstart_conv_archive
+            ],
             "experts": self.discourse_manager.serialize_experts(),
             "knowledge_base": self.knowledge_base.to_dict(),
         }
@@ -1097,7 +1175,8 @@ class CoStormRunner:
             if auth_headers:
                 encoder = Encoder(
                     api_key=None,
-                    api_base=os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE"),
+                    api_base=os.getenv("AZURE_OPENAI_ENDPOINT")
+                    or os.getenv("AZURE_API_BASE"),
                     extra_headers=auth_headers,
                 )
 
@@ -1122,12 +1201,14 @@ class CoStormRunner:
         # Load data from the dictionary
         if "conversation_history" in data:
             costorm_runner.conversation_history = [
-                ConversationTurn.from_dict(turn) for turn in data["conversation_history"]
+                ConversationTurn.from_dict(turn)
+                for turn in data["conversation_history"]
             ]
 
         if "warmstart_conv_archive" in data:
             costorm_runner.warmstart_conv_archive = [
-                ConversationTurn.from_dict(turn) for turn in data["warmstart_conv_archive"]
+                ConversationTurn.from_dict(turn)
+                for turn in data["warmstart_conv_archive"]
             ]
 
         if "experts" in data:
@@ -1175,7 +1256,9 @@ class CoStormRunner:
                     knowledge_base=self.knowledge_base,
                 )
                 self.discourse_manager.experts = (
-                    self.discourse_manager._parse_expert_names_to_agent(warmstart_experts)
+                    self.discourse_manager._parse_expert_names_to_agent(
+                        warmstart_experts
+                    )
                 )
                 self.discourse_manager.next_turn_moderator_override = True
                 self.conversation_history = (
@@ -1193,7 +1276,9 @@ class CoStormRunner:
                     )
                 if self.conversation_history is None:
                     self.conversation_history = []
-                conv_turn = self.discourse_manager.pure_rag_agent.generate_topic_background()
+                conv_turn = (
+                    self.discourse_manager.pure_rag_agent.generate_topic_background()
+                )
                 self.conversation_history.append(conv_turn)
                 self.knowledge_base.update_from_conv_turn(
                     conv_turn=conv_turn,
@@ -1212,7 +1297,9 @@ class CoStormRunner:
         with self.logging_wrapper.log_pipeline_stage(
             f"report generation after conv turn: {len(self.conversation_history)}"
         ):
-            with self.logging_wrapper.log_event("report generation stage: generate report"):
+            with self.logging_wrapper.log_event(
+                "report generation stage: generate report"
+            ):
                 self.report = self.knowledge_base.to_report()
                 return self.report
 
@@ -1256,7 +1343,9 @@ class CoStormRunner:
         """
         last_conv_turn = self.conversation_history[-1]
         cur_turn_name = f"conv turn: {len(self.conversation_history) + 1}"
-        with self.logging_wrapper.log_pipeline_stage(pipeline_stage=f"{cur_turn_name} stage"):
+        with self.logging_wrapper.log_pipeline_stage(
+            pipeline_stage=f"{cur_turn_name} stage"
+        ):
             conv_turn = None
             if user_utterance:
                 self.discourse_manager.next_turn_moderator_override = False
@@ -1267,7 +1356,9 @@ class CoStormRunner:
                 )
                 self.conversation_history.append(conv_turn)
             else:
-                with self.logging_wrapper.log_event(f"{cur_turn_name}: get turn policy"):
+                with self.logging_wrapper.log_event(
+                    f"{cur_turn_name}: get turn policy"
+                ):
                     if self.callback_handler is not None:
                         self.callback_handler.on_turn_policy_planning_start()
                     turn_policy = self.discourse_manager.get_next_turn_policy(
@@ -1277,14 +1368,18 @@ class CoStormRunner:
                         dry_run=False,
                     )
 
-                with self.logging_wrapper.log_event(f"{cur_turn_name}: generate utterance"):
+                with self.logging_wrapper.log_event(
+                    f"{cur_turn_name}: generate utterance"
+                ):
                     conv_turn = turn_policy.agent.generate_utterance(
                         knowledge_base=self.knowledge_base,
                         conversation_history=self.conversation_history,
                     )
 
                 if turn_policy.should_update_experts_list:
-                    with self.logging_wrapper.log_event(f"{cur_turn_name}: update experts list"):
+                    with self.logging_wrapper.log_event(
+                        f"{cur_turn_name}: update experts list"
+                    ):
                         self.discourse_manager._update_expert_list_from_utterance(
                             focus=last_conv_turn.raw_utterance,
                             background_info=conv_turn.raw_utterance,
@@ -1341,7 +1436,9 @@ def get_auth_headers():
 
     # Try to get Azure Bearer token only if needed
     client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
-    client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv("AZURE_CLIENT_SECRET")
+    client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
+        "AZURE_CLIENT_SECRET"
+    )
     tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
 
     if all([client_id, client_secret, tenant_id]):
@@ -1356,7 +1453,11 @@ def get_auth_headers():
                 current_time = datetime.now()
 
                 # Check if we have a valid token that's not close to expiration
-                if _cached_token is None or _token_expiry is None or current_time >= _token_expiry:
+                if (
+                    _cached_token is None
+                    or _token_expiry is None
+                    or current_time >= _token_expiry
+                ):
                     # Token is expired or about to expire, get a new one
                     token = (
                         ClientSecretCredential(
@@ -1371,7 +1472,9 @@ def get_auth_headers():
 
                     # Calculate when this token will expire (typically 1 hour/3600 seconds)
                     # Setting expiry 5 minutes before actual expiry for safety margin
-                    _token_expiry = current_time + timedelta(seconds=1800 - _TOKEN_REFRESH_MARGIN)
+                    _token_expiry = current_time + timedelta(
+                        seconds=1800 - _TOKEN_REFRESH_MARGIN
+                    )
 
                     print(f"New Azure auth token obtained, valid until {_token_expiry}")
                 else:
