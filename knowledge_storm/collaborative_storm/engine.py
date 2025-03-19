@@ -20,7 +20,7 @@ from .modules.co_storm_agents import (
 )
 from .modules.expert_generation import GenerateExpertModule
 from .modules.warmstart_hierarchical_chat import WarmStartModule
-
+from .modules.report_summary import ReportSummaryModule
 
 class CollaborativeStormLMConfigs(LMConfigs):
     """Configurations for LLM used in different parts of Co-STORM.
@@ -774,6 +774,11 @@ class CoStormRunner:
             rm=rm,
             callback_handler=callback_handler,
         )
+        
+        # Initialize the report summary module
+        self.report_summary_module = ReportSummaryModule(
+            engine=lm_config.knowledge_base_lm
+        )
 
     def add_researcher(
         self,
@@ -1300,11 +1305,14 @@ class CoStormRunner:
                     insert_under_root=self.args.rag_only_baseline_mode,
                 )
 
-    def generate_report(self) -> str:
+    def generate_report(self, personas: Optional[List[str]] = None) -> str:
         """
         Generate report leveraging organized collected information in the knowledge base (i.e. mind map).
         The article generation follows the paradigm in STORM paper, where it considers mind map nodes as section names, and generate the report section by section.
-
+        
+        Args:
+            personas: Optional list of personas to consider for targeted recommendations
+            
         Returns:
             str: A string representing the report, with "#" "##" indicating hierarchical sections and [1][2] indicating references.
         """
@@ -1314,7 +1322,21 @@ class CoStormRunner:
             with self.logging_wrapper.log_event(
                 "report generation stage: generate report"
             ):
-                self.report = self.knowledge_base.to_report()
+                report_content = self.knowledge_base.to_report()
+                
+                # Generate report summary if requested
+                with self.logging_wrapper.log_event(
+                    "report generation stage: generate summary"
+                ):
+                    summary = self.report_summary_module(
+                        topic=self.args.topic,
+                        report_content=report_content,
+                        personas=personas
+                    )
+                    # Add summary at the beginning of the report
+                    report_content = f"{summary}\n\n{report_content}"
+                
+                self.report = report_content
                 return self.report
 
     def dump_logging_and_reset(self):
