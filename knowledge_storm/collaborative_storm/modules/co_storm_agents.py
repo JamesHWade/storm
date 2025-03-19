@@ -432,14 +432,41 @@ class IdeaRefinement(dspy.Signature):
 
 class IdeaAssessment(dspy.Signature):
     """
-    Assess the proposed research idea considering its:
-    1. Novelty - how original is this idea?
-    2. Feasibility - how practical would it be to implement?
-    3. Value - what benefits might result if successful?
-    4. Relevance - how well does it relate to the discussion topic?
-    
-    Provide a balanced assessment addressing strengths and limitations.
-    Score each aspect from 1-10 (10 being highest) and provide a brief justification.
+    Critically assess the proposed research idea. Provide scores (1-10, 10=highest) and brief, specific justifications for each aspect. Avoid overestimation; a score of 6 or above indicates a truly outstanding aspect. A typical, decent proposal should score around a 3.
+
+    1.  **Novelty/Originality:** How groundbreaking is this idea compared to existing work?
+        *   **Scoring:**
+            *   1-2 (Largely Derivative):  Minor variation of existing work.
+            *   3 (Modest Improvement):  Builds upon existing work with some new elements.
+            *   4-5 (Significant Advancement):  Novel methodology, application, or perspective.
+            *   6+ (Exceptional/Groundbreaking):  Paradigm-shifting; potentially redefining the field.
+        *   **Justification:**  Cite specific examples and explain the degree of advancement.
+
+    2.  **Feasibility/Practicality:** How realistic is implementation, given resources, ethics, and potential obstacles?
+        *   **Scoring:**
+            *   1-2 (Highly Problematic):  Major, likely insurmountable obstacles.
+            *   3 (Challenging but Possible):  Requires significant effort and resources; high risk.
+            *   4-5 (Reasonably Feasible):  Manageable challenges; moderate risk.
+            *   6+ (Exceptionally Feasible):  Minimal obstacles; very low risk. (Rare).
+        *   **Justification:**  Detail specific resources and potential challenges.
+
+    3.  **Potential Value/Impact:** If successful, what *realistic* and *likely* benefits would result?
+        *   **Scoring:**
+            *   1-2 (Minimal Impact):  Limited scope or significance.
+            *   3 (Moderate Benefit):  Impacts a specific area/group.
+            *   4-5 (Significant Impact):  Wider benefits; addresses a significant problem.
+            *   6+ (Transformative Impact):  Solves a major problem or significantly advances society.
+        *   **Justification:**  Explain *why* the impact is significant (or not) and *likely*.
+
+    4.  **Relevance/Focus:** How directly and centrally does this address the specific topic/problem statement?
+        *   **Scoring:**
+            *   1-2 (Tangential):  Weak or indirect connection.
+            *   3 (Partially Relevant):  Addresses some aspects, but not the core.
+            *   4-5 (Highly Relevant):  Addresses key issues and questions directly.
+            *   6+ (Perfectly Aligned):  Addresses the central problem comprehensively.
+        *   **Justification:**  Explain the precise connection (or lack thereof).
+
+    **Overall Assessment:** Briefly summarize key strengths, weaknesses, major concerns, and *specific* potential improvements.
     """
     
     idea = dspy.InputField(prefix="Research idea to assess:", format=str)
