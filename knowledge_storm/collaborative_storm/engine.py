@@ -762,6 +762,7 @@ class CoStormRunner:
         self.report = None
         self.conversation_history = []
         self.warmstart_conv_archive = []
+        self.research_results = []  # Store research pipeline results
 
         # init discourse manager
         self.discourse_manager = DiscourseManager(
@@ -1011,50 +1012,34 @@ class CoStormRunner:
 
         Returns:
             dict: A dictionary containing:
-                - idea: The complete idea output with candidates and developed idea
+                - idea_output: The complete idea output with candidates and selection
+                - developed_idea: The selected and developed idea
                 - assessment: Assessment of the selected and developed idea
                 - plan: Experimental plan based on the idea
+                - idea_candidates: Extracted idea candidates 
                 - refined_idea: (If applicable) A refined version of the idea
                 - preliminary_plan: (If applicable) The preliminary plan created before refinement
         """
         # Wrap the entire pipeline in a single context
         with self.logging_wrapper.log_pipeline_stage("complete research pipeline"):
-            # Generate initial ideas and select the best one
+            # STEP 1: Generate and select research ideas
             idea_output = self.generate_research_idea(context=context)
+            developed_idea = self._extract_developed_idea(idea_output)
 
-            # Extract the developed idea for assessment
-            idea_parts = idea_output.split("## Developed Research Idea:")
-            if len(idea_parts) > 1:
-                developed_idea = idea_parts[1].strip()
-                # Include selection rationale for context
-                selection_parts = idea_output.split("## Selection Rationale:")
-                if len(selection_parts) > 1:
-                    selection_rationale = (
-                        selection_parts[1]
-                        .split("## Developed Research Idea:")[0]
-                        .strip()
-                    )
-                    idea_for_assessment = f"# Research Idea\n{developed_idea}\n\n# Selection Context\n{selection_rationale}"
-                else:
-                    idea_for_assessment = f"# Research Idea\n{developed_idea}"
-            else:
-                # Fallback if parsing fails
-                idea_for_assessment = idea_output
+            # STEP 2: Assess the selected idea
+            assessment = self.assess_research_idea(developed_idea)
 
-            # Assess the idea
-            assessment = self.assess_research_idea(idea_for_assessment)
-
-            # Optionally refine the idea based on the assessment
+            # STEP 3: Create plan (with optional refinement)
             refined_idea = None
             if refine_idea_from_assessment:
-                # Generate a preliminary plan based on the original idea to provide context for refinement
+                # First create a preliminary plan based on the original idea
                 preliminary_plan = self.create_experimental_plan(
-                    idea_for_assessment, assessment
+                    developed_idea, assessment
                 )
 
-                # Use the assessment as feedback to refine the idea, with the preliminary plan as context
+                # Use the assessment as feedback to refine the idea
                 refined_idea = self.refine_research_idea(
-                    original_idea=idea_for_assessment,
+                    original_idea=developed_idea,
                     feedback=f"Assessment of Original Idea:\n{assessment}",
                     previous_plan=preliminary_plan,
                 )
@@ -1062,69 +1047,35 @@ class CoStormRunner:
                 # Create the final plan based on the refined idea
                 plan = self.create_experimental_plan(refined_idea, assessment)
             else:
-                # Create plan based on the original idea
-                plan = self.create_experimental_plan(idea_for_assessment, assessment)
+                # Create plan based on the original idea (no refinement)
+                plan = self.create_experimental_plan(developed_idea, assessment)
 
-            # Build result dictionary - now with more detailed components
+            # STEP 4: Build result dictionary
             result = {
-                "idea_output": idea_output,  # Complete formatted output with candidates and selection
-                "developed_idea": idea_for_assessment,  # The selected and developed idea
+                "idea_output": idea_output,  # Complete output with candidates and selection
+                "developed_idea": developed_idea,  # The selected and developed idea
                 "assessment": assessment,
                 "plan": plan,
-                # Extract idea candidates if possible (for easier access)
-                "idea_candidates": (
-                    idea_output.split("# Selected Idea")[0]
-                    .replace("# Research Idea Candidates\n", "")
-                    .strip()
-                    if "# Research Idea Candidates" in idea_output
-                    else ""
-                ),
+                "idea_candidates": self._extract_idea_candidates(idea_output),
             }
 
-            # Add refined idea to result if applicable
+            # Add refined idea information if applicable
             if refined_idea:
                 result["refined_idea"] = refined_idea
-                # Also include the preliminary plan in the result for reference
                 result["preliminary_plan"] = preliminary_plan
 
-            # Optionally add the research output to conversation history
+            # STEP 5: Add to conversation history if requested
             if add_to_conversation and hasattr(self, "conversation_history"):
-                # Fix the import - use absolute import instead of relative import
                 from knowledge_storm.dataclass import ConversationTurn
 
-                # Add the output as a conversation turn from the researcher
                 researcher = self.get_researcher()
                 if researcher:
-                    # Format response for conversation
-                    if refined_idea:
-                        conversation_response = f"""Research Pipeline Results:
-                        
-# Original Ideas and Selection
-{idea_output}
+                    # Format the response for conversation history
+                    conversation_response = self._format_conversation_response(
+                        idea_output, assessment, plan, refined_idea
+                    )
 
-# Assessment
-{assessment}
-
-# Refined Idea
-{refined_idea}
-
-# Experimental Plan
-{plan}
-"""
-                    else:
-                        conversation_response = f"""Research Pipeline Results:
-                        
-# Ideas and Selection
-{idea_output}
-
-# Assessment
-{assessment}
-
-# Experimental Plan
-{plan}
-"""
-
-                    # Create and add the turn
+                    # Create and add the turn to conversation history
                     turn = ConversationTurn(
                         role=researcher.role_name,
                         raw_utterance=conversation_response,
@@ -1140,9 +1091,112 @@ class CoStormRunner:
                         insert_under_root=False,
                     )
 
+            # Store the research results
+            self.research_results.append(result)
+
             return result
 
+    def _extract_developed_idea(self, idea_output):
+        """
+        Extract the developed idea and selection rationale from the idea output.
+        
+        Args:
+            idea_output: The complete idea output
+            
+        Returns:
+            str: The developed idea formatted for assessment
+        """
+        idea_parts = idea_output.split("## Developed Research Idea:")
+        if len(idea_parts) > 1:
+            developed_idea = idea_parts[1].strip()
+            # Include selection rationale for context
+            selection_parts = idea_output.split("## Selection Rationale:")
+            if len(selection_parts) > 1:
+                selection_rationale = (
+                    selection_parts[1]
+                    .split("## Developed Research Idea:")[0]
+                    .strip()
+                )
+                return f"# Research Idea\n{developed_idea}\n\n# Selection Context\n{selection_rationale}"
+            else:
+                return f"# Research Idea\n{developed_idea}"
+        # Fallback if parsing fails
+        return idea_output
+    
+    def _format_conversation_response(self, idea_output, assessment, plan, refined_idea=None):
+        """
+        Format the research pipeline output for conversation history.
+        
+        Args:
+            idea_output: The complete idea output
+            assessment: The assessment of the idea
+            plan: The experimental plan
+            refined_idea: Optional refined idea
+            
+        Returns:
+            str: Formatted conversation response
+        """
+        if refined_idea:
+            return f"""Research Pipeline Results:
+            
+# Original Ideas and Selection
+{idea_output}
+
+# Assessment
+{assessment}
+
+# Refined Idea
+{refined_idea}
+
+# Experimental Plan
+{plan}
+"""
+        else:
+            return f"""Research Pipeline Results:
+            
+# Ideas and Selection
+{idea_output}
+
+# Assessment
+{assessment}
+
+# Experimental Plan
+{plan}
+"""
+    
+    def _extract_idea_candidates(self, idea_output):
+        """
+        Extract the idea candidates from the idea output.
+        
+        Args:
+            idea_output: The complete idea output
+            
+        Returns:
+            str: The extracted idea candidates
+        """
+        return (
+            idea_output.split("# Selected Idea")[0]
+            .replace("# Research Idea Candidates\n", "")
+            .strip()
+            if "# Research Idea Candidates" in idea_output
+            else ""
+        )
+
     def to_dict(self):
+        """
+        Convert the CoStormRunner instance to a dictionary for serialization.
+        
+        This method captures the complete state of the runner, including:
+        - Topic and configuration
+        - Conversation history
+        - Experts and their state
+        - Knowledge base
+        - Generated report
+        - Research results
+        
+        Returns:
+            dict: Dictionary representation of the CoStormRunner
+        """
         result = {
             "topic": self.args.topic,
             "runner_argument": self.args.to_dict(),
@@ -1161,10 +1215,29 @@ class CoStormRunner:
         if hasattr(self, "report") and self.report is not None:
             result["report"] = self.report
 
+        # Include the research results if they exist
+        if hasattr(self, "research_results") and self.research_results:
+            result["research_results"] = self.research_results
+
         return result
 
     @classmethod
     def from_dict(cls, data, callback_handler: BaseCallbackHandler = None):
+        """
+        Create a CoStormRunner instance from a dictionary representation.
+        
+        This method restores the complete state of a previously serialized runner.
+        
+        Args:
+            data (dict): Dictionary representation created by to_dict
+            callback_handler (BaseCallbackHandler, optional): Handler for callbacks
+            
+        Returns:
+            CoStormRunner: A restored CoStormRunner instance
+            
+        Raises:
+            ValueError: If no data is provided
+        """
         # Fail if no data is provided
         if not data:
             raise ValueError("No data provided to construct CoStormRunner")
@@ -1175,29 +1248,8 @@ class CoStormRunner:
         # Create logging wrapper
         logging_wrapper = LoggingWrapper(lm_config)
 
-        # Determine if we should use header-based auth for the encoder
-        client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
-        client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
-            "AZURE_CLIENT_SECRET"
-        )
-        tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
-        api_base = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE")
-
-        # Create the encoder with appropriate authentication
-        encoder = None
-        if all([client_id, client_secret, tenant_id]):
-            # Use header-based authentication for DOW environment
-            auth_headers = get_auth_headers()
-            if auth_headers:
-                encoder = Encoder(
-                    api_key=None,  # Set explicitly to None for header auth
-                    api_base=api_base,
-                    extra_headers=auth_headers,
-                )
-
-        # Fall back to standard encoder if header auth wasn't set up
-        if encoder is None:
-            encoder = Encoder()
+        # Create encoder with appropriate authentication
+        encoder = cls._create_encoder()
 
         # Create runner args from the data
         runner_args = RunnerArgument.from_dict(data["runner_argument"])
@@ -1245,7 +1297,47 @@ class CoStormRunner:
         if "report" in data:
             costorm_runner.report = data["report"]
 
+        # Load research results if they exist
+        if "research_results" in data:
+            costorm_runner.research_results = data["research_results"]
+
         return costorm_runner
+
+    @classmethod
+    def _create_encoder(cls):
+        """
+        Create and return an encoder with appropriate authentication.
+        
+        This helper method centralizes encoder creation logic for reuse.
+        
+        Returns:
+            Encoder: An encoder instance with appropriate authentication
+        """
+        # Determine if we should use header-based auth for the encoder
+        client_id = os.getenv("AZURE_OPENAI_CLIENT_ID") or os.getenv("AZURE_CLIENT_ID")
+        client_secret = os.getenv("AZURE_OPENAI_CLIENT_SECRET") or os.getenv(
+            "AZURE_CLIENT_SECRET"
+        )
+        tenant_id = os.getenv("AZURE_OPENAI_TENANT_ID") or os.getenv("AZURE_TENANT_ID")
+        api_base = os.getenv("AZURE_OPENAI_ENDPOINT") or os.getenv("AZURE_API_BASE")
+
+        # Create the encoder with appropriate authentication
+        encoder = None
+        if all([client_id, client_secret, tenant_id]):
+            # Use header-based authentication for DOW environment
+            auth_headers = get_auth_headers()
+            if auth_headers:
+                encoder = Encoder(
+                    api_key=None,  # Set explicitly to None for header auth
+                    api_base=api_base,
+                    extra_headers=auth_headers,
+                )
+
+        # Fall back to standard encoder if header auth wasn't set up
+        if encoder is None:
+            encoder = Encoder()
+            
+        return encoder
 
     def warm_start(self):
         """
@@ -1304,6 +1396,71 @@ class CoStormRunner:
                     allow_create_new_node=True,
                     insert_under_root=self.args.rag_only_baseline_mode,
                 )
+
+    @property
+    def latest_research(self):
+        """
+        Property to access the most recent research pipeline result.
+        
+        Returns:
+            dict: The most recent research pipeline result, or None if no research has been done.
+        """
+        if not self.research_results:
+            return None
+        return self.research_results[-1]
+        
+    @property
+    def all_research(self):
+        """
+        Property to access all research pipeline results.
+        
+        Returns:
+            list: All research pipeline results.
+        """
+        return self.research_results
+
+    def get_research_ideas(self, include_assessment=True, include_plan=True):
+        """
+        Get a formatted list of all research ideas generated.
+        
+        Args:
+            include_assessment (bool): Whether to include the assessment for each idea
+            include_plan (bool): Whether to include the experimental plan for each idea
+            
+        Returns:
+            str: A formatted string containing all research ideas
+        """
+        if not self.research_results:
+            return "No research ideas have been generated yet."
+            
+        output = []
+        for i, research in enumerate(self.research_results, 1):
+            output.append(f"## Research Idea {i}\n")
+            
+            # Add the developed idea
+            if "developed_idea" in research:
+                output.append(research["developed_idea"])
+            elif "idea_output" in research:
+                output.append(research["idea_output"])
+            
+            # Add the refined idea if it exists
+            if "refined_idea" in research and research["refined_idea"]:
+                output.append("\n### Refined Version\n")
+                output.append(research["refined_idea"])
+            
+            # Add the assessment if requested
+            if include_assessment and "assessment" in research:
+                output.append("\n### Assessment\n")
+                output.append(research["assessment"])
+            
+            # Add the plan if requested
+            if include_plan and "plan" in research:
+                output.append("\n### Experimental Plan\n")
+                output.append(research["plan"])
+            
+            output.append("\n\n")
+            
+        return "\n".join(output)
 
     def generate_report(self, personas: Optional[List[str]] = None) -> str:
         """
